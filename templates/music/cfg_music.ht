@@ -8,10 +8,6 @@ class CfgPatches {
 };
 
 class CfgMusic {
-  tracks[]={
-    {{track_list}}
-  };
-
   {{#each tracks}}
   class {{this.class_name}} {
     name = "{{this.pretty_name}}";
