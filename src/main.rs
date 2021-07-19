@@ -2,6 +2,7 @@ use laat::LaatCompiler;
 use std::path::PathBuf;
 use structopt::StructOpt;
 use tracing::error;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, StructOpt)]
 struct Opts {
@@ -10,31 +11,34 @@ struct Opts {
 
     #[structopt(short = "f", parse(from_os_str), default_value = "LAAT.toml")]
     /// Point to your LAAT.toml file
-    config_file: PathBuf
+    config_file: PathBuf,
 }
 
 #[derive(Debug, StructOpt)]
 enum Command {
     /// Run the LAAT compiler
-    Build {
-
-    },
+    Build {},
     /// Clean the build folder
-    Clean {
-
-    }
+    Clean {},
+    /// Using armake2 - convert the build folder into the final outputted mod.
+    Pack {},
 }
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
-
     if let Err(why) = run().await {
         error!("{}", why);
+        std::process::exit(1);
     }
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let filter = EnvFilter::new("INFO");
+
+    if let Err(why) = tracing_subscriber::fmt().with_env_filter(filter).try_init() {
+        return Err(format!("Failed to set up logger: {}", why).into());
+    }
+
     let opts = Opts::from_args();
 
     match LaatCompiler::from_path(opts.config_file).await {
@@ -42,13 +46,16 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             match opts.command {
                 Command::Build {} => {
                     laat.build().await?;
-                },
+                }
                 Command::Clean {} => {
-                    laat.clean().await?;
+                    laat.clean_build().await?;
+                }
+                Command::Pack {} => {
+                    laat.pack().await?;
+                    // armake2 build 17th/Music Music.pbo -e 'prefix=17th\Music'
                 }
             }
-
-        },
+        }
         Err(err) => error!("{}", err),
     }
 

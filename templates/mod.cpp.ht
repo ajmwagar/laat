@@ -1,0 +1,8 @@
+name = "{{name}}";
+author = "{{author}}";
+picture = "{{picture}}"; 
+logo = "{{logo}}";
+logoSmall = "{{logoSmall}}";
+overview = "{{overview}}";
+version = {{version}};
+

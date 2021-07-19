@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::io::Read;
 
@@ -14,7 +14,7 @@ pub fn get_config_from_path(path: PathBuf) -> Result<LaatConfig, Box<dyn Error>>
     Ok(config)
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct LaatConfig {
     pub prefix: String,
     pub name: String,
@@ -25,9 +25,27 @@ pub struct LaatConfig {
     pub assets_path: String,
     #[serde(default = "default_addons_path")]
     pub addons_path: String,
+    #[serde(default = "default_release_path")]
+    pub release_path: String,
+
+    #[serde(default)]
+    pub plugins: Vec<String>,
+
+    #[serde(default)]
+    pub pack: PackConfig,
 
     #[serde(flatten)]
     extra: toml::Value
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, Default)]
+pub struct PackConfig {
+    #[serde(default)]
+    pub include_folders: Vec<PathBuf>,
+    #[serde(default)]
+    pub excludes: Vec<String>,
+    #[serde(default)]
+    pub header_extensions: Vec<String>
 }
 
 fn default_build_path() -> String {
@@ -40,4 +58,8 @@ fn default_assets_path() -> String {
 
 fn default_addons_path() -> String {
     "addons".to_string()
+}
+
+fn default_release_path() -> String {
+    "release".to_string()
 }

@@ -5,11 +5,10 @@ use std::path::Path;
 use std::error::Error;
 use walkdir::DirEntry;
 use std::path::PathBuf;
-use crate::context::BuildContext;
+use crate::{context::BuildContext, create_handlebars};
 
 use serde::{Serialize, Deserialize};
 
-use handlebars::Handlebars;
 
 const MUSIC_PATH: &str = r"data\Music";
 const ADDON_NAME: &str = "Music";
@@ -71,7 +70,7 @@ pub async fn build_music_addon(
     // Template a {prefix}_Music addon
     let music_addon = MusicAddon {
         addon_name: ADDON_NAME.to_string(),
-        track_list: music_files.iter().map(|file| file.class_name.clone()).collect::<Vec<_>>().join(", "),
+        track_list: music_files.iter().map(|file| format!("\"{}\"", file.class_name)).collect::<Vec<_>>().join(", "),
         tracks: music_files.clone(),
         classes: music_classes.into_iter().map(|(class, _path)| {
             MusicClass {
@@ -82,10 +81,6 @@ pub async fn build_music_addon(
         prefix: prefix.clone(),
     };
 
-    let handlebars = create_handlebars()?;
-
-    let rendered = handlebars.render("music_addon", &music_addon)?;
-
 
     let addon_path = format!("{}/{}/{}", build_path, &prefix, ADDON_NAME.to_string());
 
@@ -94,8 +89,9 @@ pub async fn build_music_addon(
     std::fs::create_dir_all(format!("{}/data/Music", addon_path))?;
 
     // Create the config.cpp
+    let handlebars = create_handlebars()?;
+    let rendered = handlebars.render("music_addon", &music_addon)?;
     let mut file = std::fs::File::create(format!("{}/config.cpp", addon_path))?;
-
     file.write_fmt(format_args!("{}", rendered))?;
 
     // Copy the music files over
@@ -191,10 +187,3 @@ impl Track {
     }
 }
 
-fn create_handlebars<'a>() -> Result<Handlebars<'a>, Box<dyn Error>> {
-    let mut handlebars = Handlebars::new();
-
-    handlebars.register_template_string("music_addon", include_str!("../../templates/music/cfg_music.ht"))?;
-
-    Ok(handlebars)
-}
