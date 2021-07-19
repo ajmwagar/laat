@@ -1,0 +1,32 @@
+class CfgPatches {
+  class {{prefix}}_{{addon_name}} {
+    units[] = {};
+    weapons[] = {};
+    requiredAddons[] = {};
+    fileName = "{{prefix}}_{{addon_name}}.pbo";
+  };
+};
+
+class CfgMusic {
+  tracks[]={
+    {{track_list}}
+  };
+
+  {{#each tracks}}
+  class {{this.class_name}} {
+    name = "{{this.pretty_name}}";
+    sound[] = { "{{this.sound_path}}",db+0,1.0 };
+    duration = {{this.duration}};
+    musicClass = "{{this.music_class}}";
+  };
+
+  {{/each}}
+};
+
+class CfgMusicClasses {
+  {{#each classes}}
+  class {{this.class_name}} {
+    displayName = "{{this.display_name}}";
+  };
+  {{/each}}
+};
