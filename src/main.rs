@@ -18,6 +18,10 @@ enum Command {
     /// Run the LAAT compiler
     Build {
 
+    },
+    /// Clean the build folder
+    Clean {
+
     }
 }
 
@@ -38,6 +42,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             match opts.command {
                 Command::Build {} => {
                     laat.build().await?;
+                },
+                Command::Clean {} => {
+                    laat.clean().await?;
                 }
             }
 

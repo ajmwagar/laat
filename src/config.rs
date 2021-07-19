@@ -7,12 +7,14 @@ pub fn get_config_from_path(path: PathBuf) -> Result<LaatConfig, Box<dyn Error>>
     let mut file = std::fs::File::open(path)?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
-    let config = toml::from_str(&contents)?;
+    let config: LaatConfig = toml::from_str(&contents)?;
+
+    debug!("Extra: {:?}", config.extra);
 
     Ok(config)
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct LaatConfig {
     pub prefix: String,
     pub name: String,
@@ -23,6 +25,9 @@ pub struct LaatConfig {
     pub assets_path: String,
     #[serde(default = "default_addons_path")]
     pub addons_path: String,
+
+    #[serde(flatten)]
+    extra: toml::Value
 }
 
 fn default_build_path() -> String {

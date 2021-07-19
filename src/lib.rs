@@ -38,8 +38,7 @@ pub struct LaatCompiler {
 
 impl LaatCompiler {
     pub async fn build(&self) -> Result<(), Box<dyn std::error::Error>> {
-        info!("Clearing build directory");
-        self.pre_build().await?;
+        self.clean().await?;
 
         for (name, plugin) in self.plugins.iter() {
             info!("Running {}.", name);
@@ -52,17 +51,12 @@ impl LaatCompiler {
     }
 
     fn get_context(&self) -> BuildContext {
-        let LaatConfig { prefix, build_path, addons_path, assets_path, .. } = self.config.clone();
-
-        BuildContext {
-            build_path,
-            assets_path,
-            addons_path,
-            prefix,
-        }
+        self.config.clone()
     }
 
-    async fn pre_build(&self) -> Result<(), Box<dyn Error>>{
+    pub async fn clean(&self) -> Result<(), Box<dyn Error>>{
+        info!("Clearing build directory");
+
         if let Err(why) = tokio::fs::remove_dir_all(self.get_context().build_path).await {
             warn!("Failed to clear build folder: {}", why);
         }
@@ -104,13 +98,7 @@ pub mod plugins {
 }
 
 pub mod context {
-    #[derive(Debug)]
-    pub struct BuildContext {
-        pub build_path: String,
-        pub assets_path: String,
-        pub addons_path: String,
-        pub prefix: String,
-    }
+    pub type BuildContext = super::config::LaatConfig;
 }
 
 mod config;
