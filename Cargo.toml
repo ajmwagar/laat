@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 serde = { version = "1.0.126", features = ["derive"] }
 tokio = { version = "1.8.1", features = ["full"] }
-toml = "0.5.8"
+toml = { version = "0.5.8", features = ["preserve_order"] }
 tracing = "0.1.26"
 structopt = "0.3.22"
 handlebars = "4.1.0"

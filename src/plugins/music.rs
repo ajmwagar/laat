@@ -101,7 +101,7 @@ pub async fn build_music_addon(
     let handlebars = create_handlebars()?;
     let config_cpp = handlebars.render("music_addon", &music_addon)?;
 
-    manager.set_config_cpp(config_cpp);
+    manager.set_file(config_cpp, "config.cpp".into());
 
     // Copy the music files over
     for track in music_files {
