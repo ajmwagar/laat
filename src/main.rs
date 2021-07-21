@@ -12,6 +12,9 @@ struct Opts {
     #[structopt(short = "f", parse(from_os_str), default_value = "LAAT.toml")]
     /// Point to your LAAT.toml file
     config_file: PathBuf,
+
+    #[structopt(long)]
+    debug: bool,
 }
 
 #[derive(Debug, StructOpt)]
@@ -32,14 +35,18 @@ async fn main() {
     }
 }
 
-async fn run() -> Result<(), Box<dyn std::error::Error>> {
-    let filter = EnvFilter::new("INFO");
+async fn run() -> laat::Result<()> {
+    let opts = Opts::from_args();
+
+    let filter = if opts.debug {
+        EnvFilter::new("DEBUG")
+    } else {
+        EnvFilter::new("INFO")
+    };
 
     if let Err(why) = tracing_subscriber::fmt().with_env_filter(filter).try_init() {
         return Err(format!("Failed to set up logger: {}", why).into());
     }
-
-    let opts = Opts::from_args();
 
     match LaatCompiler::from_path(opts.config_file).await {
         Ok(laat) => {

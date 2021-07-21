@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
-use std::error::Error;
-use std::io::Read;
+use crate::Result;
+use tokio::io::AsyncReadExt;
 
-pub fn get_config_from_path(path: PathBuf) -> Result<LaatConfig, Box<dyn Error>> {
-    let mut file = std::fs::File::open(path)?;
+pub async fn get_config_from_path(path: PathBuf) -> Result<LaatConfig> {
+    let mut file = tokio::fs::File::open(path).await?;
     let mut contents = String::new();
-    file.read_to_string(&mut contents)?;
+    file.read_to_string(&mut contents).await?;
     let config: LaatConfig = toml::from_str(&contents)?;
 
     debug!("Extra: {:?}", config.extra);
@@ -35,7 +35,7 @@ pub struct LaatConfig {
     pub pack: PackConfig,
 
     #[serde(flatten)]
-    extra: toml::Value
+    pub extra: toml::Value
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]

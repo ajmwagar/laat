@@ -1,11 +1,21 @@
+//! Compiler Plugin for generating a Music addon from a folder of music.
+//!
+//! This plugin only works with .ogg files, and by-default will look in ./assets/music and any
+//! subfolders for .ogg files
+//!
+//! If music is inside a subfolder, it will be catagorized by that subfolders name.
+//!
+//! This music will show up in the Zeus "Play Music" module, and will be prefixed by the prefix
+//! defined in LAAT.toml
+
+use crate::context::AddonManager;
 use crate::Plugin;
-use std::io::Write;
 use ogg_metadata::{read_format, OggFormat, AudioMetadata};
 use std::path::Path;
-use std::error::Error;
+
 use walkdir::DirEntry;
 use std::path::PathBuf;
-use crate::{context::BuildContext, create_handlebars};
+use crate::{Result, context::BuildContext, create_handlebars};
 
 use serde::{Serialize, Deserialize};
 
@@ -17,8 +27,12 @@ pub struct MusicPlugin;
 
 #[async_trait]
 impl Plugin for MusicPlugin {
-    async fn build(&self, build_context: BuildContext) -> Result<(), Box<dyn Error>> {
+    async fn build(&self, build_context: BuildContext) -> Result<()> {
         build_music_addon(build_context).await
+    }
+
+    fn name(&self) -> String {
+        "music".to_string()
     }
 }
 
@@ -26,13 +40,14 @@ impl Plugin for MusicPlugin {
 #[instrument(err, skip(build_context))]
 pub async fn build_music_addon(
     build_context: BuildContext,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<()> {
     let BuildContext {
         assets_path,
         prefix,
-        build_path,
         ..
-    } = build_context;
+    } = build_context.clone();
+
+    let mut manager = AddonManager::from_context(ADDON_NAME.to_string(), build_context);
 
     // Walkdir through ./assets/music
     let dir = walkdir::WalkDir::new(format!("{}/music", assets_path));
@@ -82,22 +97,18 @@ pub async fn build_music_addon(
     };
 
 
-    let addon_path = format!("{}/{}/{}", build_path, &prefix, ADDON_NAME.to_string());
-
-    // Create the music addon file structure, and then copy the music files over.
-    std::fs::create_dir_all(&addon_path)?;
-    std::fs::create_dir_all(format!("{}/data/Music", addon_path))?;
-
     // Create the config.cpp
     let handlebars = create_handlebars()?;
-    let rendered = handlebars.render("music_addon", &music_addon)?;
-    let mut file = std::fs::File::create(format!("{}/config.cpp", addon_path))?;
-    file.write_fmt(format_args!("{}", rendered))?;
+    let config_cpp = handlebars.render("music_addon", &music_addon)?;
+
+    manager.set_config_cpp(config_cpp);
 
     // Copy the music files over
     for track in music_files {
-        std::fs::copy(track.path, format!("{}/data/Music/{}", addon_path, track.file_name))?;
+        let new_path = manager.add_asset(track.path, Some("data/Music".into()))?;
     }
+
+    manager.build_addon().await?;
 
     Ok(())
 }
@@ -131,7 +142,7 @@ struct Track {
 }
 
 impl Track {
-    pub fn from_dir_entry(entry: DirEntry, prefix: &str, addon_name: &str) -> Result<Self, Box<dyn Error>> {
+    pub fn from_dir_entry(entry: DirEntry, prefix: &str, addon_name: &str) -> Result<Self> {
         let file_name = entry.file_name().to_owned().to_string_lossy().to_string();
 
         let name = file_name.clone().split(".ogg").next().unwrap_or(&file_name).to_string();
@@ -161,7 +172,7 @@ impl Track {
     }
 
     #[instrument(err)]
-    fn get_duration_from_path(path: &Path) -> Result<usize, Box<dyn Error>> {
+    fn get_duration_from_path(path: &Path) -> Result<usize> {
         let file = std::fs::File::open(path)?;
 
         let formats = read_format(file)?;
