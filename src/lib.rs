@@ -23,6 +23,7 @@ extern crate async_trait;
 #[macro_use]
 extern crate tracing;
 
+use std::path::Path;
 use futures_util::future::join_all;
 use crate::config::LaatConfig;
 use crate::context::BuildContext;
@@ -41,6 +42,11 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
 
 const PROJECT_FOLDERS: &[&str] = &["addons", "assets", "build", "release"];
+const GITIGNORE: &str = 
+r"
+build
+release
+";
 
 #[derive(Clone, Debug, StructOpt, Serialize)]
 pub struct InitSettings {
@@ -374,10 +380,15 @@ impl LaatCompiler {
         // Create LAAT.toml file
         let mut laat_toml = init.path.clone();
         laat_toml.push("LAAT.toml");
-        let mut file = tokio::fs::File::create(laat_toml).await?;
 
         let contents = handlebars.render("laat.toml", &init)?;
-        file.write_all(contents.as_bytes()).await?;
+        create_and_write_file(&laat_toml, contents).await?;
+
+        let mut gitignore = init.path.clone();
+        gitignore.push(".gitignore");
+
+        create_and_write_file(&gitignore, GITIGNORE).await?;
+
 
         // Init LAAT
         Self::from_path(init.path).await
@@ -442,13 +453,11 @@ impl LaatCompiler {
         debug!(?workshop_item, "Rendering SteamCMD VDF");
         let handlebars = create_handlebars()?;
         let rendered = handlebars.render("workshop_upload.vdf", &workshop_item)?;
-
         let vdf_path: PathBuf = "/tmp/workshop_upload.vdf".into();
 
         // Write to temp file
         debug!("Writing VDF file");
-        let mut vdf_file = tokio::fs::File::create(&vdf_path).await?;
-        vdf_file.write_all(rendered.as_bytes()).await?;
+        create_and_write_file(&vdf_path, rendered).await?;
 
         // 4. bash "steamcmd +login steamuser steampass steamguard +workshop_build_item ${PWD}/test.vdf +quit"
         info!("Starting SteamCMD");
@@ -499,6 +508,13 @@ pub fn create_handlebars<'a>() -> Result<Handlebars<'a>> {
     handlebars.register_template_string("mod.cpp", include_str!("../templates/mod.cpp.ht"))?;
 
     Ok(handlebars)
+}
+
+async fn create_and_write_file(file_path: impl AsRef<Path>, contents: impl Into<String>) -> Result<()> {
+    let mut file = tokio::fs::File::create(file_path).await?;
+    file.write_all(contents.into().as_bytes()).await?;
+
+    Ok(())
 }
 
 use plugins::Plugin;
