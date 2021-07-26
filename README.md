@@ -132,6 +132,25 @@ A LAAT Project might look like the following:
    └── @17th
 ```
 
+## Developing with LAAT
+
+The development workflow with LAAT adds a new step.
+
+We call it the "build" step, which comes before PBO packing.
+
+Think of the "build" step as another developer who is working on the project with you. It will generate code and addons and add them to the `build` folder.
+
+---
+
+The workflow for people who are building normal addons doesn't change, However, we have removed the P:/ drive.
+
+The steps in the pipeline are as follows:
+- `build`: LAAT generates your addons
+- `pack`: LAAT uses `armake2` to pack your addons into PBOs.
+- `sign`: LAAT signs your PBOs using your `.biprivatekey` file.
+- `release`: LAAT used `steamcmd` to upload your mod to the Steam Workshop.
+
+
 ## Compiler Plugins
 
 Plugins are what take your assets and configuration file, and turn them into valid Arma 3 Mod Addons (i.e. the things you build into PBOs)
