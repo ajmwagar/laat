@@ -80,8 +80,11 @@ pub struct ReleaseSettings {
     no_change_log: bool,
 
     /// Path to changelog file
-    #[structopt(short, parse(from_os_str))]
+    #[structopt(short = "f", parse(from_os_str))]
     change_log_file: Option<PathBuf>,
+
+    #[structopt(short = "c", long = "changelog")]
+    change_notes: Option<String>
 }
 
 /// LAAT Compiler
@@ -432,7 +435,7 @@ impl LaatCompiler {
 
             contents
         } else {
-            String::new()
+            release.change_notes.unwrap_or_default()
         };
 
         // 2. Strip " from changelog
