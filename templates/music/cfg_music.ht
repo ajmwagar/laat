@@ -7,6 +7,14 @@ class CfgPatches {
   };
 };
 
+class CfgMusicClasses {
+  {{#each classes}}
+  class {{this.class_name}} {
+    displayName = "{{this.display_name}}";
+  };
+  {{/each}}
+};
+
 class CfgMusic {
   tracks[]={
     {{{track_list}}}
@@ -20,13 +28,5 @@ class CfgMusic {
     musicClass = "{{this.music_class}}";
   };
 
-  {{/each}}
-};
-
-class CfgMusicClasses {
-  {{#each classes}}
-  class {{this.class_name}} {
-    displayName = "{{this.display_name}}";
-  };
   {{/each}}
 };

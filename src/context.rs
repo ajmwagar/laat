@@ -113,7 +113,7 @@ impl AddonManager {
             file_path.push(path);
 
             let mut file = tokio::fs::File::create(file_path).await?;
-            file.write(string.as_bytes()).await?;
+            file.write_all(string.as_bytes()).await?;
         }
 
 
