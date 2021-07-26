@@ -1,0 +1,21 @@
+# Mod Settings
+prefix = "{{prefix}}"
+name = "{{prefix}} Aux Mod"
+author = "{{author}}"
+
+# Enable the following plugins
+plugins = [
+  "music",
+  "addons",
+  "kits"
+]
+
+# PBO packing settings
+[pack] 
+excludes = ["*.png", "*.jpg", "*.jpeg"]
+include_folders = []
+header_extensions = []
+
+# Kit settings
+[kits]
+file = "./kits.toml"

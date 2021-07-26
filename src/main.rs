@@ -1,3 +1,5 @@
+use laat::ReleaseSettings;
+use laat::InitSettings;
 use laat::LaatCompiler;
 use std::path::PathBuf;
 use structopt::StructOpt;
@@ -19,12 +21,33 @@ struct Opts {
 
 #[derive(Debug, StructOpt)]
 enum Command {
-    /// Run the LAAT compiler
-    Build {},
+    /// Create a new LAAT project
+    Init(InitSettings),
+    /// Create a new key pair
+    Keygen {
+        #[structopt(parse(from_os_str))]
+        name: PathBuf,
+    },
     /// Clean the build folder
     Clean {},
-    /// Using armake2 - convert the build folder into the final outputted mod.
-    Pack {},
+    /// Generate addons
+    Build {},
+    /// Convert addons to PBOs
+    Pack {
+        #[structopt(long)]
+        /// Sign your PBOs after building
+        sign: bool
+    },
+    /// Sign your PBOs
+    Sign {},
+    /// Publish your mod to the Steam Workshop
+    Release(ReleaseSettings),
+    /// Runs clean, build, pack, sign, and optionally release
+    Ship {
+        #[structopt(long)]
+        /// Uploaded outputted mod to the Steam Workshop
+        release: bool
+    }
 }
 
 #[tokio::main]
@@ -36,8 +59,10 @@ async fn main() {
 }
 
 async fn run() -> laat::Result<()> {
+    // Parse CLI Args
     let opts = Opts::from_args();
 
+    // Set up logging
     let filter = if opts.debug {
         EnvFilter::new("DEBUG")
     } else {
@@ -48,22 +73,31 @@ async fn run() -> laat::Result<()> {
         return Err(format!("Failed to set up logger: {}", why).into());
     }
 
-    match LaatCompiler::from_path(opts.config_file).await {
-        Ok(laat) => {
-            match opts.command {
-                Command::Build {} => {
-                    laat.build().await?;
-                }
-                Command::Clean {} => {
-                    laat.clean_build().await?;
-                }
-                Command::Pack {} => {
-                    laat.pack().await?;
-                    // armake2 build 17th/Music Music.pbo -e 'prefix=17th\Music'
-                }
-            }
+    // Create LAAT Context
+    let laat = if let Command::Init(init) = &opts.command {
+        LaatCompiler::init(init.clone()).await
+    } else {
+        LaatCompiler::from_path(opts.config_file).await
+    }?;
+
+    // Run Command
+    match opts.command {
+        Command::Build {} => {
+            laat.build().await?;
         }
-        Err(err) => error!("{}", err),
+        Command::Clean {} => {
+            laat.clean_build().await?;
+        }
+        Command::Pack { sign } => {
+            laat.pack(sign).await?;
+        }
+        Command::Keygen { name } => {
+            laat.create_keys(name).await?;
+        }
+        Command::Sign {} => {
+            laat.sign().await?;
+        }
+        _ => {}
     }
 
     Ok(())

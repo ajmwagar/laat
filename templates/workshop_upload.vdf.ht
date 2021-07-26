@@ -1,0 +1,7 @@
+"workshopitem"
+    {
+        "appid" "{{appid}}"
+        "publishedfileid" "{{fileid}}"
+        "contentfolder" "{{release_path}}"
+        "changenote" "{{changenotes}}"
+    }
