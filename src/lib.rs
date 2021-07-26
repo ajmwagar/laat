@@ -23,6 +23,7 @@ extern crate async_trait;
 #[macro_use]
 extern crate tracing;
 
+use futures_util::future::join_all;
 use crate::config::LaatConfig;
 use crate::context::BuildContext;
 use armake2::pbo::cmd_build;
@@ -32,6 +33,7 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::PathBuf;
 use structopt::StructOpt;
+use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -58,11 +60,14 @@ pub struct InitSettings {
 #[derive(Clone, Debug, StructOpt, Serialize)]
 pub struct ReleaseSettings {
     /// Steam Username
+    #[structopt(short)]
     username: String,
     /// Steam Password
+    #[structopt(short)]
     password: String,
     /// Steam Guard Key
-    gaurd_key: String,
+    #[structopt(short)]
+    guard_key: Option<String>,
 
     /// Disable changelog
     #[structopt(long)]
@@ -70,8 +75,7 @@ pub struct ReleaseSettings {
 
     /// Path to changelog file
     #[structopt(short, parse(from_os_str))]
-    change_log_file: Option<PathBuf>
-
+    change_log_file: Option<PathBuf>,
 }
 
 /// LAAT Compiler
@@ -82,16 +86,18 @@ pub struct LaatCompiler {
 }
 
 impl LaatCompiler {
+    #[instrument(skip(self))]
     pub async fn build(&self) -> Result<()> {
+        info!("Generating Arma 3 Addons...");
         self.clean_build().await?;
 
         for (name, plugin) in self.plugins.iter() {
-            info!("Running {}.", name);
+            debug!("Running {}.", name);
             plugin.build(self.get_context()).await?;
         }
 
         info!(
-            "Success. Mod has been generated at: ./{}",
+            "Success! Mod has been generated at: ./{}",
             self.get_context().build_path
         );
 
@@ -116,6 +122,7 @@ impl LaatCompiler {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub async fn pack(&self, sign: bool) -> Result<()> {
         info!("Packaging project...");
         let release_path = self.get_context().released_addon_path();
@@ -132,6 +139,7 @@ impl LaatCompiler {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     pub async fn create_keys(&self, name: PathBuf) -> Result<()> {
         let LaatConfig { keys_path, .. } = self.get_context();
         info!("Creating Keypair {:?}", name);
@@ -184,19 +192,24 @@ impl LaatCompiler {
         Err("Keys not found!".into())
     }
 
+    #[instrument(skip(self))]
     pub async fn sign(&self) -> Result<()> {
         let release_path = self.get_context().released_addon_path();
+
+        info!("Signing PBOs...");
 
         self.sign_pbos(&release_path).await?;
 
         Ok(())
     }
 
-    #[instrument(skip(self), err)]
+    #[instrument(skip(self, release_path), err)]
     pub async fn sign_pbos(&self, release_path: &str) -> Result<()> {
         let (privkey_path, pubkey_path) = self.get_keys().await?;
 
         let walkdir = walkdir::WalkDir::new(format!("{}/addons", release_path));
+
+        let mut sign_futs = Vec::new();
 
         for entry in walkdir {
             match entry {
@@ -210,15 +223,23 @@ impl LaatCompiler {
 
                     if is_pbo {
                         let path = entry.path().to_owned();
-                        info!(?path, ?privkey_path, "Signing: {:?}", path);
+                        debug!(?path, ?privkey_path, "Signing: {:?}", path);
 
                         // Sign
-                        armake2::sign::cmd_sign(
-                            privkey_path.clone(),
-                            path,
-                            None,
-                            armake2::sign::BISignVersion::V2,
-                        )?;
+                        let privkey_path = privkey_path.clone();
+
+                        let fut = tokio::task::spawn_blocking(move || {
+                            if let Err(why) = armake2::sign::cmd_sign(
+                                privkey_path,
+                                path,
+                                None,
+                                armake2::sign::BISignVersion::V2,
+                            ) {
+                                error!(?why, "Error signing PBO!");
+                            }
+                        });
+
+                        sign_futs.push(fut);
                     }
                 }
                 Err(why) => warn!("Error walking dir: {}", why),
@@ -234,6 +255,8 @@ impl LaatCompiler {
 
         tokio::fs::copy(pubkey_path, format!("{}/keys/{}", release_path, file_name)).await?;
 
+        join_all(sign_futs).await;
+
         Ok(())
     }
 
@@ -242,6 +265,8 @@ impl LaatCompiler {
         let walkdir = walkdir::WalkDir::new(self.get_context().build_path)
             .min_depth(2)
             .max_depth(2);
+
+        let mut pbo_futs = Vec::new();
 
         for entry in walkdir {
             match entry {
@@ -253,9 +278,10 @@ impl LaatCompiler {
                         } = self.get_context().clone();
 
                         let release_path = release_path.to_string();
-                        tokio::task::spawn_blocking(move || {
+
+                        let fut = tokio::task::spawn_blocking(move || {
                             let mut build_pbo = || {
-                                info!("{}", entry.path().display());
+                                debug!("Creating PBO: {}", entry.path().display());
 
                                 let file_name = entry.file_name().to_string_lossy();
                                 let pbo_name = format!("{}.pbo", file_name);
@@ -264,8 +290,8 @@ impl LaatCompiler {
                                     .push(format!("prefix={}\\{}", prefix, file_name));
 
                                 let mut output = std::fs::File::create(format!(
-                                        "{}/addons/{}",
-                                        release_path, pbo_name
+                                    "{}/addons/{}",
+                                    release_path, pbo_name
                                 ))?;
 
                                 cmd_build(
@@ -284,17 +310,21 @@ impl LaatCompiler {
                                 error!("Error creating pbo: {}", why);
                             }
                         });
+
+                        pbo_futs.push(fut);
                     }
                 }
                 Err(why) => warn!("Failed walking entry: {}", why),
             }
         }
 
+        join_all(pbo_futs).await;
+
         Ok(())
     }
 
     pub async fn setup_release_folder(&self, release_path: &str) -> Result<()> {
-        info!("Clearing release directory");
+        info!("Clearing release directory...");
 
         if let Err(why) = tokio::fs::remove_dir_all(self.get_context().release_path).await {
             warn!("Failed to clear build folder: {}", why);
@@ -304,7 +334,6 @@ impl LaatCompiler {
         tokio::fs::create_dir_all(&release_path).await?;
         tokio::fs::create_dir_all(format!("{}/addons", release_path)).await?;
         tokio::fs::create_dir_all(format!("{}/keys", release_path)).await?;
-
 
         Ok(())
     }
@@ -330,8 +359,17 @@ impl LaatCompiler {
         Ok(Self { config, plugins })
     }
 
+    #[instrument]
     pub async fn init(init: InitSettings) -> Result<Self> {
         let handlebars = create_handlebars()?;
+
+        // Create project folders
+        for folder in PROJECT_FOLDERS {
+            let mut path = init.path.clone();
+            path.push(folder);
+            debug!("Creating folder: {:?}", path);
+            tokio::fs::create_dir_all(path).await?;
+        }
 
         // Create LAAT.toml file
         let mut laat_toml = init.path.clone();
@@ -341,16 +379,89 @@ impl LaatCompiler {
         let contents = handlebars.render("laat.toml", &init)?;
         file.write_all(contents.as_bytes()).await?;
 
-        // Create project folders
-        for folder in PROJECT_FOLDERS {
-            let mut path = init.path.clone();
-            path.push(folder);
-            tokio::fs::create_dir_all(path).await?;
-        }
-
         // Init LAAT
         Self::from_path(init.path).await
     }
+
+    /// Release mod to Steam Workshop
+    pub async fn release(&self, release: ReleaseSettings) -> Result<()> {
+        let context = self.get_context();
+
+        // 1. Get Changelog
+        let change_log = if let Some(log_file) = release.change_log_file {
+            let mut file = tokio::fs::File::open(log_file).await?;
+            let mut contents = String::new();
+            file.read_to_string(&mut contents).await?;
+
+            contents
+        } else {
+            let change_file_path = PathBuf::from("/tmp/changenote.log");
+
+            let mut change_log_file = tokio::fs::File::create(&change_file_path).await?;
+
+            // TODO: Default changelog file
+
+            let mut editor = tokio::process::Command::new("$EDITOR")
+                .arg(change_file_path)
+                .spawn()?;
+
+            editor.wait().await?;
+
+            let mut contents = String::new();
+
+            change_log_file.read_to_string(&mut contents).await?;
+
+            contents
+        };
+
+        // 2. Strip " from changelog
+        let change_log = change_log.replace("\"", "");
+
+        // 3. render workshop_upload.vdf
+        let workshop_item = WorkshopItem {
+            appid: context.release.app_id,
+            publishedfileid: context.release.workshop_id,
+            contentfolder: context.released_addon_path().into(),
+            changenote: change_log,
+        };
+
+        let handlebars = create_handlebars()?;
+        let rendered = handlebars.render("workshop_upload.vdf", &workshop_item)?;
+
+        let vdf_path: PathBuf = "/tmp/workshop_upload.vdf".into();
+
+        // Write to temp file
+        let mut vdf_file = tokio::fs::File::create(&vdf_path).await?;
+        vdf_file.write_all(rendered.as_bytes()).await?;
+
+        // 4. bash "steamcmd +login steamuser steampass steamguard +workshop_build_item ${PWD}/test.vdf +quit"
+        let mut steamcmd = tokio::process::Command::new("steamcmd");
+        let mut steamcmd = steamcmd
+            .arg("+login")
+            .arg(release.username)
+            .arg(release.password);
+
+        if let Some(key) = release.guard_key {
+            steamcmd = steamcmd.arg(key);
+        }
+
+        steamcmd = steamcmd
+            .arg("+workshop_build_item")
+            .arg(vdf_path)
+            .arg("+quit");
+
+        steamcmd.spawn()?.wait().await?;
+
+        Ok(())
+    }
+}
+
+#[derive(Serialize)]
+struct WorkshopItem {
+    appid: usize,
+    publishedfileid: usize,
+    contentfolder: PathBuf,
+    changenote: String,
 }
 
 pub fn create_handlebars<'a>() -> Result<Handlebars<'a>> {
@@ -363,7 +474,10 @@ pub fn create_handlebars<'a>() -> Result<Handlebars<'a>> {
 
     handlebars.register_template_string("laat.toml", include_str!("../templates/laat.toml.ht"))?;
 
-    handlebars.register_template_string("workshop_upload.vdf", include_str!("../templates/workshop_upload.vdf.ht"))?;
+    handlebars.register_template_string(
+        "workshop_upload.vdf",
+        include_str!("../templates/workshop_upload.vdf.ht"),
+    )?;
 
     handlebars.register_template_string("mod.cpp", include_str!("../templates/mod.cpp.ht"))?;
 

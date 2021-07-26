@@ -43,11 +43,7 @@ enum Command {
     /// Publish your mod to the Steam Workshop
     Release(ReleaseSettings),
     /// Runs clean, build, pack, sign, and optionally release
-    Ship {
-        #[structopt(long)]
-        /// Uploaded outputted mod to the Steam Workshop
-        release: bool
-    }
+    Ship {}
 }
 
 #[tokio::main]
@@ -96,6 +92,13 @@ async fn run() -> laat::Result<()> {
         }
         Command::Sign {} => {
             laat.sign().await?;
+        }
+        Command::Release(release) => {
+            laat.release(release).await?;
+        }
+        Command::Ship {} => {
+            laat.build().await?;
+            laat.pack(true).await?;
         }
         _ => {}
     }
