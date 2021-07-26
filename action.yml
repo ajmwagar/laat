@@ -1,0 +1,20 @@
+name: 'laat'
+description: 'Run laat command'
+author: 'Avery Wagar'
+branding:
+  icon: play-circle
+  color: black
+
+inputs:
+  command:
+    description: LAAT command to run (ex. `build` or `pack`)
+    required: true
+  args:
+    description: Arguments for the LAAT command
+    required: false
+
+runs:
+  using: 'docker'
+  image: './action/Dockerfile'
+  args:
+    - ${{ inputs.command }} ${{ inputs.args }}

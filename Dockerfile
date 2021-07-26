@@ -25,6 +25,8 @@ COPY ./templates ./templates
 RUN cargo build --release 
 
 # Run in bare-metal environment
-FROM alpine:latest 
+FROM steamcmd/steamcmd:latest
+
 WORKDIR /
+
 COPY --from=cargo-build /usr/src/laat/target/x86_64-unknown-linux-musl/release/laat /usr/bin/
