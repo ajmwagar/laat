@@ -141,7 +141,8 @@ impl AddonManager {
 
 #[cfg(test)]
 mod tests {
-    use toml::Value;
+    use crate::config::ReleaseConfig;
+use toml::Value;
     use crate::config::PackConfig;
     use super::*;
 
@@ -160,6 +161,11 @@ mod tests {
                 header_extensions: vec![]
             },
             extra: Value::Float(0.0),
+            keys_path: "keys".to_string(),
+            release: ReleaseConfig {
+                app_id: 0,
+                workshop_id: 0,
+            },
         }
     }
 
