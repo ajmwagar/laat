@@ -1,4 +1,4 @@
-FROM ajmwagar/laat:latest
+FROM  ghcr.io/ajmwagar/laat:master
 
 COPY entrypoint.sh /entrypoint.sh
 
