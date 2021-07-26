@@ -2,6 +2,10 @@
 
 LAAT is a CLI tool for generating Arma 3 Aux mods from simpler TOML configuration files.
 
+## Disclaimer
+
+The LAAT Devlopment team is not resposible for any mods or content uploaded to the Steam Workshop using LAAT.
+
 ## Why?
 
 I ran an Arma 3 unit for close to 6 months. At our peak we had around 50 members, each of whom would, over time, get their own custom armor added to our mod. Initially it was easy to handle the demand, make a texture, convert from png > paa, and write the nessecary configuration. However, after reaching a critical mass, the requests became too much for one developer to handle. That unit ultimately failed due to this issue.
