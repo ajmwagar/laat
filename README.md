@@ -10,6 +10,14 @@ LAAT aims to fix that, by automating as much of the Arma 3 Aux Mod development p
 
 With LAAT you can use CI/CD to automate releases and updates to your mod, you have deterministic builds, and most importantly, you have **much** less code to mantain. 
 
+## Installation
+
+```bash
+git clone https://github.com/ajmwagar/laat
+cd laat
+cargo install --path .
+```
+
 ## Usage
 
 Create a new LAAT project with `laat init`
