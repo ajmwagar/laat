@@ -38,6 +38,44 @@ Sign your PBOs with `laat pack --sign` or `laat sign`
 
 Release to the Steam workshop with `laat release -u <steam user> -p <steam pass> -g <steam guard code>`
 
+### GitHub Actions
+
+Since LAAT, by-default, doesn't require any extra tooling, you can run it in GitHub actions and automatically build and release your mod to the Steam Workshop.
+
+```yml
+name: Build and Release with LAAT
+
+on:
+  # Triggers the workflow on push or pull request events but only for the master branch
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checks-out your repository
+      - uses: actions/checkout@v2
+
+      # Build, Pack, and Sign using LAAT
+      - uses: ajmwagar/laat@v1.1
+        with:
+          command: ship
+      
+      # Release the mod to the Steam Workshop
+      - uses: ajmwagar/laat@v1.1
+        with:
+          command: release
+          args: -u ${{ secrets.STEAM_USER }} -p ${{ secrets.STEAM_PASS }} --no-change-log
+```
+
 ## Configuration
 
 Currently you configure the bulk of LAAT via the `LAAT.toml` file.
