@@ -1,7 +1,7 @@
 # Mod Settings
-prefix = "{{prefix}}"
-name = "{{prefix}} Aux Mod"
-author = "{{author}}"
+prefix = "{{{prefix}}}"
+name = "{{{prefix}}} Aux Mod"
+author = "{{{author}}}"
 
 # Enable the following plugins
 plugins = [

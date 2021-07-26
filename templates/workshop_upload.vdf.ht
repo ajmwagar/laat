@@ -2,6 +2,6 @@
     {
         "appid" "{{app_id}}"
         "publishedfileid" "{{file_id}}"
-        "contentfolder" "{{content_folder}}"
-        "changenote" "{{changenotes}}"
+        "contentfolder" "{{{content_folder}}}"
+        "changenote" "{{{changenotes}}}"
     }
