@@ -410,7 +410,7 @@ impl LaatCompiler {
             file.read_to_string(&mut contents).await?;
 
             contents
-        } else if !release.no_change_log {
+        } else if !release.no_change_log && release.change_notes.is_none() {
             debug!("Creating change log file");
             let change_file_path = PathBuf::from("/tmp/changenote.log");
 
