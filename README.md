@@ -1,4 +1,4 @@
-# LAAT: Lightweight Automated Aux Tool
+# LAAT: Lightweight Automated Arma Toolkit
 
 LAAT is a CLI tool for generating Arma 3 Aux mods from simpler TOML configuration files.
 
