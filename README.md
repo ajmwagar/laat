@@ -4,7 +4,7 @@ LAAT is a CLI tool for generating Arma 3 Aux mods from simpler TOML configuratio
 
 ## Disclaimer
 
-The LAAT Devlopment team is not resposible for any mods or content uploaded to the Steam Workshop using LAAT.
+The LAAT Devlopment team is not resposible for any mods or content uploaded to the Steam Workshop using LAAT. It is a tool hoping to ease the Arma 3 mod development process, not make it easier to steal other people's copyrighted works.
 
 ## Why?
 
@@ -68,6 +68,31 @@ workshop_id = 0000000 # Steam Workshop Item ID
 file = "./kits.toml"
 ```
 
+A LAAT Project might look like the following:
+
+```
+.
+├── addons
+│  ├── CommandLink
+│  ├── Core
+│  ├── Customs
+│  ├── Disguise
+│  ├── Factions
+│  ├── JetpackPatch
+│  ├── Kits
+│  ├── LAATImpulsePatch
+│  └── Vehicles
+├── assets
+│  └── music
+├── build
+├── keys
+│  ├── 17th.bikey
+│  └── 17th.biprivatekey
+├── kits.toml
+├── LAAT.toml
+└── release
+   └── @17th
+```
 
 ## Compiler Plugins
 
