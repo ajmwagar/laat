@@ -83,8 +83,8 @@ pub struct ReleaseSettings {
     #[structopt(short = "f", parse(from_os_str))]
     change_log_file: Option<PathBuf>,
 
-    #[structopt(short = "c", long = "changelog")]
-    change_notes: Option<String>
+    #[structopt(required_if("change_log_file", "None"), required_if("no_change_log", "false"))]
+    change_notes: Vec<String>
 }
 
 /// LAAT Compiler
@@ -410,7 +410,7 @@ impl LaatCompiler {
             file.read_to_string(&mut contents).await?;
 
             contents
-        } else if !release.no_change_log && release.change_notes.is_none() {
+        } else if !release.no_change_log && release.change_notes.is_empty() {
             debug!("Creating change log file");
             let change_file_path = PathBuf::from("/tmp/changenote.log");
 
@@ -435,7 +435,7 @@ impl LaatCompiler {
 
             contents
         } else {
-            release.change_notes.unwrap_or_default()
+            release.change_notes.join(" ")
         };
 
         // 2. Strip " from changelog
