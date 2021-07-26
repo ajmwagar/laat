@@ -384,57 +384,72 @@ impl LaatCompiler {
     }
 
     /// Release mod to Steam Workshop
+    #[instrument(skip(self, release), err)]
     pub async fn release(&self, release: ReleaseSettings) -> Result<()> {
         let context = self.get_context();
 
         // 1. Get Changelog
         let change_log = if let Some(log_file) = release.change_log_file {
+            debug!("Loading change log");
             let mut file = tokio::fs::File::open(log_file).await?;
             let mut contents = String::new();
             file.read_to_string(&mut contents).await?;
 
             contents
         } else {
+            debug!("Creating change log file");
             let change_file_path = PathBuf::from("/tmp/changenote.log");
-
-            let mut change_log_file = tokio::fs::File::create(&change_file_path).await?;
 
             // TODO: Default changelog file
 
-            let mut editor = tokio::process::Command::new("$EDITOR")
-                .arg(change_file_path)
+            let editor = std::env::var("EDITOR")?;
+
+            info!("Waiting for {} to close...", editor);
+            let mut editor = tokio::process::Command::new(editor)
+                .arg(&change_file_path)
                 .spawn()?;
 
             editor.wait().await?;
 
-            let mut contents = String::new();
+            debug!("Opening {:?}", change_file_path);
+            let mut change_log_file = tokio::fs::File::open(&change_file_path).await?;
 
+            debug!("Reading {:?} contents", change_file_path);
+
+            let mut contents = String::new();
             change_log_file.read_to_string(&mut contents).await?;
 
             contents
         };
 
         // 2. Strip " from changelog
-        let change_log = change_log.replace("\"", "");
+        let changenotes = change_log.replace("\"", "");
+
+        let mut content_folder: PathBuf = std::env::var("PWD")?.into();
+        content_folder.push(context.released_addon_path());
+
 
         // 3. render workshop_upload.vdf
         let workshop_item = WorkshopItem {
-            appid: context.release.app_id,
-            publishedfileid: context.release.workshop_id,
-            contentfolder: context.released_addon_path().into(),
-            changenote: change_log,
+            app_id: context.release.app_id,
+            file_id: context.release.workshop_id,
+            content_folder,
+            changenotes,
         };
 
+        debug!(?workshop_item, "Rendering SteamCMD VDF");
         let handlebars = create_handlebars()?;
         let rendered = handlebars.render("workshop_upload.vdf", &workshop_item)?;
 
         let vdf_path: PathBuf = "/tmp/workshop_upload.vdf".into();
 
         // Write to temp file
+        debug!("Writing VDF file");
         let mut vdf_file = tokio::fs::File::create(&vdf_path).await?;
         vdf_file.write_all(rendered.as_bytes()).await?;
 
         // 4. bash "steamcmd +login steamuser steampass steamguard +workshop_build_item ${PWD}/test.vdf +quit"
+        info!("Starting SteamCMD");
         let mut steamcmd = tokio::process::Command::new("steamcmd");
         let mut steamcmd = steamcmd
             .arg("+login")
@@ -456,12 +471,12 @@ impl LaatCompiler {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 struct WorkshopItem {
-    appid: usize,
-    publishedfileid: usize,
-    contentfolder: PathBuf,
-    changenote: String,
+    app_id: usize,
+    file_id: usize,
+    content_folder: PathBuf,
+    changenotes: String,
 }
 
 pub fn create_handlebars<'a>() -> Result<Handlebars<'a>> {
