@@ -18,17 +18,17 @@ pub struct AddonManager {
     /// Map containing ./assets paths and maps them to Addon prefixed paths.
     asset_map: HashMap<PathBuf, PathBuf>,
 
-    file_map: HashMap<PathBuf, String>
+    file_map: HashMap<PathBuf, String>,
 }
 
 impl AddonManager {
     /// Create a new Addon from an addon name and build_context
-    pub fn from_context(addon: String, build_context: BuildContext) -> Self {
+    pub fn from_context(addon: impl Into<String>, build_context: BuildContext) -> Self {
         Self {
-            addon,
+            addon: addon.into(),
             build_context,
             asset_map: HashMap::new(),
-            file_map: HashMap::new()
+            file_map: HashMap::new(),
         }
     }
 
@@ -49,32 +49,37 @@ impl AddonManager {
     /// Add an asset to the AssetManager
     ///
     /// Returns the new path for the asset, once copied to the module.
-    pub fn add_asset(&mut self, asset_path: PathBuf, addon_folder: Option<PathBuf>) -> Result<PathBuf> {
+    pub fn add_asset(
+        &mut self,
+        asset_path: PathBuf,
+        addon_folder: Option<PathBuf>,
+    ) -> Result<PathBuf> {
         let mut addon_path = PathBuf::new();
         addon_path.push(self.addon_path()); // 17th/{addon}
 
-    if let Some(folder) = addon_folder {
-        addon_path.push(folder);
-    }
+        if let Some(folder) = addon_folder {
+            addon_path.push(folder);
+        }
 
-    if let Some(file) = asset_path.file_name() {
-        addon_path.push(file); // texture.ogg
-    }
-    else {
-        return Err(format!("Failed to get file name for: {:?}", asset_path).into());
-    }
+        if let Some(file) = asset_path.file_name() {
+            addon_path.push(file); // texture.ogg
+        } else {
+            return Err(format!("Failed to get file name for: {:?}", asset_path).into());
+        }
 
-    self.asset_map.insert(asset_path, addon_path.clone());
+        self.asset_map.insert(asset_path, addon_path.clone());
 
-    Ok(addon_path)
+        Ok(addon_path)
     }
 
     /// Iterates over the loaded assets, and copies them to their destined module paths. This
     /// will also create the addon folder if it doesn't already exists.
+    #[instrument(err, skip(self))]
     async fn copy_assets(&self) -> Result<()> {
         let mut futs = Vec::new();
 
         for (asset, addon_path) in self.asset_map.clone().into_iter() {
+            debug!("Copying {} > {}", asset.display(), addon_path.display());
             let mut dest = self.build_path();
             dest.push(addon_path);
 
@@ -99,7 +104,7 @@ impl AddonManager {
     }
 
     /// Set the value to write to target file
-    pub fn set_file(&mut self, buffer: String, path: PathBuf) {
+    pub fn add_file(&mut self, buffer: String, path: PathBuf) {
         let mut file_path = PathBuf::new();
         file_path.push(self.addon_path());
         file_path.push(path);
@@ -107,15 +112,20 @@ impl AddonManager {
         self.file_map.insert(file_path, buffer);
     }
 
+    #[instrument(err, skip(self))]
     async fn write_files(&self) -> Result<()> {
         for (path, string) in self.file_map.clone().into_iter() {
+            debug!("Writing file: {}", path.display());
             let mut file_path = self.build_path();
             file_path.push(path);
+
+            if let Some(parent) = file_path.parent() {
+                tokio::fs::create_dir_all(parent).await?;
+            }
 
             let mut file = tokio::fs::File::create(file_path).await?;
             file.write_all(string.as_bytes()).await?;
         }
-
 
         Ok(())
     }
@@ -141,10 +151,10 @@ impl AddonManager {
 
 #[cfg(test)]
 mod tests {
-    use crate::config::ReleaseConfig;
-use toml::Value;
-    use crate::config::PackConfig;
     use super::*;
+    use crate::config::PackConfig;
+    use crate::config::ReleaseConfig;
+    use toml::Value;
 
     fn build_context() -> BuildContext {
         BuildContext {
@@ -158,7 +168,7 @@ use toml::Value;
             pack: PackConfig {
                 include_folders: vec![],
                 excludes: vec![],
-                header_extensions: vec![]
+                header_extensions: vec![],
             },
             extra: Value::Float(0.0),
             keys_path: "keys".to_string(),
@@ -168,7 +178,6 @@ use toml::Value;
             },
         }
     }
-
 
     #[test]
     fn test_asset_pathing() -> Result<()> {

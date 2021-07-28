@@ -36,14 +36,21 @@ enum Command {
     Pack {
         #[structopt(long)]
         /// Sign your PBOs after building
-        sign: bool
+        sign: bool,
+        #[structopt(long)]
+        /// Build with windows filenames
+        windows: bool
     },
     /// Sign your PBOs
     Sign {},
     /// Publish your mod to the Steam Workshop
     Release(ReleaseSettings),
     /// Runs clean, build, pack, sign, and optionally release
-    Ship {}
+    Ship {
+        #[structopt(long)]
+        /// Build with windows filenames
+        windows: bool
+    }
 }
 
 #[tokio::main]
@@ -60,9 +67,9 @@ async fn run() -> laat::Result<()> {
 
     // Set up logging
     let filter = if opts.debug {
-        EnvFilter::new("DEBUG")
+        EnvFilter::new("laat=debug")
     } else {
-        EnvFilter::new("INFO")
+        EnvFilter::new("laat=info")
     };
 
     if let Err(why) = tracing_subscriber::fmt().with_env_filter(filter).try_init() {
@@ -84,8 +91,8 @@ async fn run() -> laat::Result<()> {
         Command::Clean {} => {
             laat.clean_build().await?;
         }
-        Command::Pack { sign } => {
-            laat.pack(sign).await?;
+        Command::Pack { sign, windows } => {
+            laat.pack(sign, windows).await?;
         }
         Command::Keygen { name } => {
             laat.create_keys(name).await?;
@@ -96,9 +103,9 @@ async fn run() -> laat::Result<()> {
         Command::Release(release) => {
             laat.release(release).await?;
         }
-        Command::Ship {} => {
+        Command::Ship { windows } => {
             laat.build().await?;
-            laat.pack(true).await?;
+            laat.pack(true, windows).await?;
         }
         _ => {}
     }

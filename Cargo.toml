@@ -21,3 +21,4 @@ tracing-subscriber = "0.2.19"
 armake2 = "0.3.0"
 futures-util = "0.3.15"
 async-recursion = "0.3.2"
+hemtt-serde = { path = "./hemtt-serde" }

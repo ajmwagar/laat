@@ -84,7 +84,8 @@ pub struct ReleaseSettings {
     change_log_file: Option<PathBuf>,
 
     #[structopt(required_if("change_log_file", "None"), required_if("no_change_log", "false"))]
-    change_notes: Vec<String>
+    change_notes: Vec<String>,
+
 }
 
 /// LAAT Compiler
@@ -132,17 +133,17 @@ impl LaatCompiler {
     }
 
     #[instrument(skip(self))]
-    pub async fn pack(&self, sign: bool) -> Result<()> {
+    pub async fn pack(&self, sign: bool, windows: bool) -> Result<()> {
         info!("Packaging project...");
         let release_path = self.get_context().released_addon_path();
 
-        self.setup_release_folder(&release_path).await?;
+        self.setup_release_folder(&release_path, windows).await?;
         self.create_mod_cpp(&release_path).await?;
 
-        self.create_pbos(&release_path).await?;
+        self.create_pbos(&release_path, windows).await?;
 
         if sign {
-            self.sign_pbos(&release_path).await?;
+            self.sign_pbos(&release_path, windows).await?;
         }
 
         Ok(())
@@ -207,16 +208,30 @@ impl LaatCompiler {
 
         info!("Signing PBOs...");
 
-        self.sign_pbos(&release_path).await?;
+        self.sign_pbos(&release_path, false).await?;
 
         Ok(())
     }
 
     #[instrument(skip(self, release_path), err)]
-    pub async fn sign_pbos(&self, release_path: &str) -> Result<()> {
+    pub async fn sign_pbos(&self, release_path: &str, windows: bool) -> Result<()> {
         let (privkey_path, pubkey_path) = self.get_keys().await?;
 
-        let walkdir = walkdir::WalkDir::new(format!("{}/addons", release_path));
+        let addon_path = if windows {
+            "Addons"
+        }
+        else {
+            "addons"
+        };
+
+        let key_path = if windows {
+            "Keys"
+        }
+        else {
+            "keys"
+        };
+
+        let walkdir = walkdir::WalkDir::new(format!("{}/{}", release_path, addon_path));
 
         let mut sign_futs = Vec::new();
 
@@ -262,7 +277,7 @@ impl LaatCompiler {
 
         info!("Copying key file: {}", file_name);
 
-        tokio::fs::copy(pubkey_path, format!("{}/keys/{}", release_path, file_name)).await?;
+        tokio::fs::copy(pubkey_path, format!("{}/{}/{}", release_path, key_path, file_name)).await?;
 
         join_all(sign_futs).await;
 
@@ -270,12 +285,19 @@ impl LaatCompiler {
     }
 
     #[instrument(skip(self), err)]
-    pub async fn create_pbos(&self, release_path: &str) -> Result<()> {
+    pub async fn create_pbos(&self, release_path: &str, windows: bool) -> Result<()> {
         let walkdir = walkdir::WalkDir::new(self.get_context().build_path)
             .min_depth(2)
             .max_depth(2);
 
         let mut pbo_futs = Vec::new();
+
+        let addon_path = if windows {
+            "Addons"
+        }
+        else {
+            "addons"
+        };
 
         for entry in walkdir {
             match entry {
@@ -299,8 +321,8 @@ impl LaatCompiler {
                                     .push(format!("prefix={}\\{}", prefix, file_name));
 
                                 let mut output = std::fs::File::create(format!(
-                                    "{}/addons/{}",
-                                    release_path, pbo_name
+                                    "{}/{}/{}",
+                                    release_path, addon_path, pbo_name
                                 ))?;
 
                                 cmd_build(
@@ -332,7 +354,7 @@ impl LaatCompiler {
         Ok(())
     }
 
-    pub async fn setup_release_folder(&self, release_path: &str) -> Result<()> {
+    pub async fn setup_release_folder(&self, release_path: &str, windows: bool) -> Result<()> {
         info!("Clearing release directory...");
 
         if let Err(why) = tokio::fs::remove_dir_all(self.get_context().release_path).await {
@@ -341,8 +363,15 @@ impl LaatCompiler {
 
         // Create file structure
         tokio::fs::create_dir_all(&release_path).await?;
-        tokio::fs::create_dir_all(format!("{}/addons", release_path)).await?;
-        tokio::fs::create_dir_all(format!("{}/keys", release_path)).await?;
+
+        if windows {
+            tokio::fs::create_dir_all(format!("{}/Addons", release_path)).await?;
+            tokio::fs::create_dir_all(format!("{}/Keys", release_path)).await?;
+        }
+        else {
+            tokio::fs::create_dir_all(format!("{}/addons", release_path)).await?;
+            tokio::fs::create_dir_all(format!("{}/keys", release_path)).await?;
+        }
 
         Ok(())
     }
@@ -501,6 +530,11 @@ pub fn create_handlebars<'a>() -> Result<Handlebars<'a>> {
         include_str!("../templates/music/cfg_music.ht"),
     )?;
 
+    handlebars.register_template_string(
+        "missions_addon",
+        include_str!("../templates/missions/cfg_missions.ht"),
+    )?;
+
     handlebars.register_template_string("laat.toml", include_str!("../templates/laat.toml.ht"))?;
 
     handlebars.register_template_string(
@@ -545,6 +579,7 @@ pub mod plugins {
             Box::new(AddonPlugin),
             Box::new(CustomsPlugin),
             Box::new(KitPlugin),
+            Box::new(MissionPlugin)
         ]
     }
 
@@ -559,6 +594,9 @@ pub mod plugins {
 
     mod kits;
     pub use kits::KitPlugin;
+
+    mod missions;
+    pub use missions::MissionPlugin;
 }
 
 pub mod context;

@@ -303,6 +303,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "hemtt-serde"
+version = "0.1.0"
+dependencies = [
+ "lazy_static",
+ "serde",
+]
+
+[[package]]
 name = "hermit-abi"
 version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -345,6 +353,7 @@ dependencies = [
  "async-trait",
  "futures-util",
  "handlebars",
+ "hemtt-serde",
  "ogg_metadata",
  "serde",
  "structopt",

@@ -1,0 +1,19 @@
+class CfgPatches {
+  class {{prefix}}_{{addon_name}} {
+    units[] = {};
+    weapons[] = {};
+    requiredAddons[] = {};
+    fileName = "{{prefix}}_{{addon_name}}.pbo";
+  };
+};
+
+class CfgMissions {
+  class MPMissions {
+    {{#each missions}}
+    class {{{this.class_name}}} {
+      briefingName = "{{this.briefing_name}}";
+      directory = "{{this.directory}}";
+    };
+    {{/each}}
+  };
+};
