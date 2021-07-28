@@ -163,6 +163,46 @@ The `addons` plugin is the simplist. It takes all of the existing Arma 3 Addons 
 
 This enables you to use LAAT as much or as little as you'd like, by mantaining support for the existing Arma 3 Mod format and tooling.
 
+### `missions`
+
+The `missions` plugin aims to fix the pain-points associated with mantaining server mission files, and any compositions that are needed across all files.
+
+To get started, add the following to your `LAAT.toml`
+
+```toml
+[missions]
+addon_name = "Missions"
+
+composition = "./assets/compositions/Skybase"
+
+# X, Y, Z
+composition_offset = [0, 0, 0]
+ignore_center = true
+
+respawn_delay = 2 # 2 seconds
+
+mission_name = "LAATMission"
+
+maps = [
+"Altis",
+"Stratis",
+"Tanoa",
+"Malden"
+]
+```
+
+and make sure you add the missions plugin to your plugins section:
+
+```toml
+# Enable the following plugins
+plugins = [
+  # ...
+  "missions" # ADD THIS ONE!
+]
+```
+
+Now, assuming your `Skybase` composition floats above the air a bit, and has proper respawn points, and playable soldiers, you'll be greeted with functional mission files for each of the listed `maps`.
+
 ### `music`
 
 The `music` plugin generates a `Music` addon from your `assets/music` folder. It will generate the proper `CfgMusic` and `CfgMusicClass` entries to expose the songs of your choosing in the Zeus `Play Music` action.
