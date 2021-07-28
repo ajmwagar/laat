@@ -30,9 +30,8 @@ dependencies = [
 [[package]]
 name = "armake2"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9239a68e3003352adcbfa452442bbbdeb200ce6b4fac3e3835deeb59912b26e2"
 dependencies = [
+ "ansi_term 0.11.0",
  "byteorder",
  "colored",
  "docopt",
@@ -41,7 +40,6 @@ dependencies = [
  "peg",
  "regex",
  "serde",
- "serde_derive",
  "time",
  "winreg",
 ]

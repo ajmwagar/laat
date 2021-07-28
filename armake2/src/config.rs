@@ -39,6 +39,123 @@ pub struct Config {
     root_body: ConfigClass,
 }
 
+impl Config {
+    /// Writes the config (unrapified) to the output.
+    pub fn write<O: Write>(&self, output: &mut O) -> Result<(), Error> {
+        self.root_body.write(output, 0)
+    }
+
+    /// Returns the unrapified config as a string.
+    pub fn to_string(&self) -> Result<String, Error> {
+        let buffer = Vec::new();
+        let mut cursor: Cursor<Vec<u8>> = Cursor::new(buffer);
+        self.write(&mut cursor)?;
+
+        Ok(String::from_utf8(cursor.into_inner()).unwrap())
+    }
+
+    /// Writes the rapified config to the output.
+    pub fn write_rapified<O: Write>(&self, output: &mut O) -> Result<(), Error> {
+        let mut writer = BufWriter::new(output);
+
+        writer.write_all(b"\0raP")?;
+        writer.write_all(b"\0\0\0\0\x08\0\0\0")?; // always_0, always_8
+
+        let buffer: Box<[u8]> = vec![0; self.root_body.rapified_length()].into_boxed_slice();
+        let mut cursor: Cursor<Box<[u8]>> = Cursor::new(buffer);
+        self.root_body.write_rapified(&mut cursor, 16).prepend_error("Failed to rapify root class:")?;
+
+        let enum_offset: u32 = 16 + cursor.get_ref().len() as u32;
+        writer.write_u32::<LittleEndian>(enum_offset)?;
+
+        writer.write_all(cursor.get_ref())?;
+
+        writer.write_all(b"\0\0\0\0")?;
+
+        Ok(())
+    }
+
+    /// Returns the rapified config as a `Cursor`.
+    pub fn to_cursor(&self) -> Result<Cursor<Box<[u8]>>, Error> {
+        let len = self.root_body.rapified_length() + 20;
+
+        let buffer: Box<[u8]> = vec![0; len].into_boxed_slice();
+        let mut cursor: Cursor<Box<[u8]>> = Cursor::new(buffer);
+        self.write_rapified(&mut cursor)?;
+
+        Ok(cursor)
+    }
+
+    /// Reads the unrapified config from input, preprocessing it.
+    ///
+    /// `path` is the path to the input if it is known and is used for relative includes and error
+    /// messages. `includefolders` are the folders searched for absolute includes and should usually at
+    /// least include the current working directory.
+    pub fn read<I: Read>(input: &mut I, path: Option<PathBuf>, includefolders: &[PathBuf]) -> Result<Config, Error> {
+        let mut buffer = String::new();
+        input.read_to_string(&mut buffer).prepend_error("Failed to read input file:")?;
+
+        let (preprocessed, info) = preprocess(buffer, path, includefolders).prepend_error("Failed to preprocess config:")?;
+
+        let mut warnings: Vec<(usize, String, Option<&'static str>)> = Vec::new();
+
+        let result = config_grammar::config(&preprocessed, &mut warnings).format_error(&info, &preprocessed);
+
+        for w in warnings {
+
+            let location = if !warning_suppressed(w.2) {
+                let mut line = preprocessed[..w.0].chars().filter(|c| c == &'\n').count();
+                let file = info.line_origins[min(line, info.line_origins.len()) - 1].1.as_ref().map(|p| p.to_str().unwrap().to_string());
+                line = info.line_origins[min(line, info.line_origins.len()) - 1].0 as usize + 1;
+
+                (file, Some(line as u32))
+            } else {
+                (None, None)
+            };
+
+            warning(w.1, w.2, location);
+        }
+
+        result
+    }
+
+    /// Preprocesses and parses input string.
+    ///
+    /// `path` is the path to the input if it is known and is used for relative includes and error
+    /// messages. `includefolders` are the folders searched for absolute includes and should usually at
+    /// least include the current working directory.
+    pub fn from_string(input: String, path: Option<PathBuf>, includefolders: &[PathBuf]) -> Result<Config, Error> {
+        let mut cursor = Cursor::new(input.into_bytes());
+        Self::read(&mut cursor, path, includefolders)
+    }
+
+    /// Reads the rapified config from input.
+    pub fn read_rapified<I: Read + Seek>(input: &mut I) -> Result<Config, Error> {
+        let mut reader = BufReader::new(input);
+
+        let mut buffer = [0; 4];
+        reader.read_exact(&mut buffer)?;
+
+        if &buffer != b"\0raP" {
+            return Err(error!("File doesn't seem to be a rapified config."));
+        }
+
+        Ok(Config {
+            root_body: ConfigClass::read_rapified(&mut reader, 0)?
+        })
+    }
+
+    pub fn from_config_class(root_body: ConfigClass) -> Self {
+        Self {
+            root_body
+        }
+    }
+
+    pub fn into_inner(self) -> ConfigClass {
+        self.root_body
+    }
+}
+
 /// Config class
 #[derive(Debug)]
 pub struct ConfigClass {
@@ -428,112 +545,6 @@ impl ConfigClass {
     }
 }
 
-impl Config {
-    /// Writes the config (unrapified) to the output.
-    pub fn write<O: Write>(&self, output: &mut O) -> Result<(), Error> {
-        self.root_body.write(output, 0)
-    }
-
-    /// Returns the unrapified config as a string.
-    pub fn to_string(&self) -> Result<String, Error> {
-        let buffer = Vec::new();
-        let mut cursor: Cursor<Vec<u8>> = Cursor::new(buffer);
-        self.write(&mut cursor)?;
-
-        Ok(String::from_utf8(cursor.into_inner()).unwrap())
-    }
-
-    /// Writes the rapified config to the output.
-    pub fn write_rapified<O: Write>(&self, output: &mut O) -> Result<(), Error> {
-        let mut writer = BufWriter::new(output);
-
-        writer.write_all(b"\0raP")?;
-        writer.write_all(b"\0\0\0\0\x08\0\0\0")?; // always_0, always_8
-
-        let buffer: Box<[u8]> = vec![0; self.root_body.rapified_length()].into_boxed_slice();
-        let mut cursor: Cursor<Box<[u8]>> = Cursor::new(buffer);
-        self.root_body.write_rapified(&mut cursor, 16).prepend_error("Failed to rapify root class:")?;
-
-        let enum_offset: u32 = 16 + cursor.get_ref().len() as u32;
-        writer.write_u32::<LittleEndian>(enum_offset)?;
-
-        writer.write_all(cursor.get_ref())?;
-
-        writer.write_all(b"\0\0\0\0")?;
-
-        Ok(())
-    }
-
-    /// Returns the rapified config as a `Cursor`.
-    pub fn to_cursor(&self) -> Result<Cursor<Box<[u8]>>, Error> {
-        let len = self.root_body.rapified_length() + 20;
-
-        let buffer: Box<[u8]> = vec![0; len].into_boxed_slice();
-        let mut cursor: Cursor<Box<[u8]>> = Cursor::new(buffer);
-        self.write_rapified(&mut cursor)?;
-
-        Ok(cursor)
-    }
-
-    /// Reads the unrapified config from input, preprocessing it.
-    ///
-    /// `path` is the path to the input if it is known and is used for relative includes and error
-    /// messages. `includefolders` are the folders searched for absolute includes and should usually at
-    /// least include the current working directory.
-    pub fn read<I: Read>(input: &mut I, path: Option<PathBuf>, includefolders: &[PathBuf]) -> Result<Config, Error> {
-        let mut buffer = String::new();
-        input.read_to_string(&mut buffer).prepend_error("Failed to read input file:")?;
-
-        let (preprocessed, info) = preprocess(buffer, path, includefolders).prepend_error("Failed to preprocess config:")?;
-
-        let mut warnings: Vec<(usize, String, Option<&'static str>)> = Vec::new();
-
-        let result = config_grammar::config(&preprocessed, &mut warnings).format_error(&info, &preprocessed);
-
-        for w in warnings {
-
-            let location = if !warning_suppressed(w.2) {
-                let mut line = preprocessed[..w.0].chars().filter(|c| c == &'\n').count();
-                let file = info.line_origins[min(line, info.line_origins.len()) - 1].1.as_ref().map(|p| p.to_str().unwrap().to_string());
-                line = info.line_origins[min(line, info.line_origins.len()) - 1].0 as usize + 1;
-
-                (file, Some(line as u32))
-            } else {
-                (None, None)
-            };
-
-            warning(w.1, w.2, location);
-        }
-
-        result
-    }
-
-    /// Preprocesses and parses input string.
-    ///
-    /// `path` is the path to the input if it is known and is used for relative includes and error
-    /// messages. `includefolders` are the folders searched for absolute includes and should usually at
-    /// least include the current working directory.
-    pub fn from_string(input: String, path: Option<PathBuf>, includefolders: &[PathBuf]) -> Result<Config, Error> {
-        let mut cursor = Cursor::new(input.into_bytes());
-        Self::read(&mut cursor, path, includefolders)
-    }
-
-    /// Reads the rapified config from input.
-    pub fn read_rapified<I: Read + Seek>(input: &mut I) -> Result<Config, Error> {
-        let mut reader = BufReader::new(input);
-
-        let mut buffer = [0; 4];
-        reader.read_exact(&mut buffer)?;
-
-        if &buffer != b"\0raP" {
-            return Err(error!("File doesn't seem to be a rapified config."));
-        }
-
-        Ok(Config {
-            root_body: ConfigClass::read_rapified(&mut reader, 0)?
-        })
-    }
-}
 
 /// Reads input, preprocesses and rapifies it and writes to output.
 ///
