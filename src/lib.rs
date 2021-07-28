@@ -537,6 +537,9 @@ pub fn create_handlebars<'a>() -> Result<Handlebars<'a>> {
 
     handlebars.register_template_string("laat.toml", include_str!("../templates/laat.toml.ht"))?;
 
+    handlebars.register_template_string("mission.sqm", include_str!("../templates/mission.sqm.ht"))?;
+
+
     handlebars.register_template_string(
         "workshop_upload.vdf",
         include_str!("../templates/workshop_upload.vdf.ht"),

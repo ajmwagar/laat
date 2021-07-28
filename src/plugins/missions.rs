@@ -18,33 +18,47 @@ pub struct MissionPlugin;
 impl Plugin for MissionPlugin {
     #[instrument(err, skip(build_config))]
     async fn build(&self, build_config: BuildContext) -> Result<()> {
-
         // Extract MissionSettings from BuildContext
         let mission_settings = MissionSettings::from_build_config(&build_config)?;
 
         // Load composition file
-        let composition = load_composition(&mission_settings.composition).await?;
+        let composition = load_composition(
+            &mission_settings.composition,
+            mission_settings.composition_offset,
+        )
+        .await?;
 
         // For each Map create mission based on settings.
         let mut missions = create_missions(&mission_settings, &build_config).await?;
 
         // Merge composition into mission
-        missions
-            .iter_mut()
-            .for_each(|mission| mission.merge_composition(&composition));
+        missions.iter_mut().for_each(|mission| {
+            if let Err(why) = mission.merge_composition(&composition) {
+                warn!("Failed to merge composition: {}", why);
+            }
+        });
 
         // Save mission to addon
         let mut addon_manager =
             AddonManager::from_context(&mission_settings.addon_name, build_config.clone());
 
         let classes = missions
-            .iter()
-            .map(|mission| {
-                let path: PathBuf = format!("missions/{}/mission.sqm", mission.mission_name()).into();
+            .into_iter()
+            .filter_map(|mission| {
+                let path: PathBuf =
+                    format!("missions/{}/mission.sqm", mission.mission_name()).into();
 
-                addon_manager.add_file(mission.to_sqm(), path.clone());
+                let sqm = match mission.to_sqm() {
+                    Ok(sqm) => sqm,
+                    Err(err) => {
+                        warn!("Error creating sqm: {}", err);
+                        return None;
+                    }
+                };
 
-                (path, mission.mission_name())
+                addon_manager.add_file(sqm, path.clone());
+
+                Some((path, mission))
             })
             .collect::<Vec<_>>();
 
@@ -124,11 +138,12 @@ fn default_respawn_delay() -> usize {
 struct Composition {
     header: Config,
     composition: Config,
+    offset: (f64, f64, f64),
 }
 
 impl Composition {
     #[instrument(err)]
-    pub async fn from_path(path: &PathBuf) -> Result<Self> {
+    pub async fn from_path(path: &PathBuf, offset: (f64, f64, f64)) -> Result<Self> {
         let (header, composition) = tokio::join!(
             tokio::fs::File::open(format!("{}/header.sqe", path.display())),
             tokio::fs::File::open(format!("{}/composition.sqe", path.display()))
@@ -139,49 +154,116 @@ impl Composition {
 
         Ok(Composition {
             header,
-            composition
+            composition,
+            offset,
         })
+    }
+
+    pub fn get_center(&self) -> (f64, f64, f64) {
+        (0., 0., 0.)
     }
 }
 
 #[instrument(err)]
-async fn load_composition(composition_path: &PathBuf) -> Result<Composition> {
+async fn load_composition(
+    composition_path: &PathBuf,
+    composition_offset: (f64, f64, f64),
+) -> Result<Composition> {
     info!("Loading composition at: {:?}", composition_path);
-    Ok(Composition::from_path(composition_path).await?)
+    Ok(Composition::from_path(composition_path, composition_offset).await?)
 }
 
 #[instrument(err)]
-async fn create_missions(mission_settings: &MissionSettings, build_config: &BuildContext) -> Result<Vec<Mission>> {
+async fn create_missions(
+    mission_settings: &MissionSettings,
+    build_config: &BuildContext,
+) -> Result<Vec<Mission>> {
     info!("Creating missions...");
-    Ok(mission_settings.maps.iter().map(|map| Mission {
-        map_name: map.clone(),
-        mission_name: mission_settings.mission_name.clone(),
-        prefix: build_config.prefix.clone()
-    }).collect())
+    Ok(mission_settings
+        .maps
+        .iter()
+        .filter_map(|map| {
+            Mission::new(
+                build_config.prefix.clone(),
+                mission_settings.mission_name.clone(),
+                map.clone(),
+                &mission_settings,
+                &build_config,
+            )
+            .ok()
+        })
+        .collect())
 }
 
-#[derive(Serialize)]
 struct Mission {
     map_name: String,
     mission_name: String,
     prefix: String,
+
+    sqm: Config,
 }
 
 impl Mission {
-    pub fn merge_composition(&mut self, composition: &Composition) {
+    #[instrument(skip(mission_settings), err)]
+    pub fn new(
+        prefix: String,
+        mission_name: String,
+        map_name: String,
+        mission_settings: &MissionSettings,
+        build_config: &BuildContext,
+    ) -> Result<Self> {
+        let handlebars = create_handlebars()?;
+
+        #[derive(Serialize)]
+        struct MissionTemplate {
+            author: String,
+            respawn_delay: usize,
+            mission_name: String,
+        }
+
+        let template = MissionTemplate {
+            author: build_config
+                .extra
+                .get("author")
+                .map(|v| v.to_string())
+                .unwrap_or_default(),
+            mission_name: mission_name.clone(),
+            respawn_delay: mission_settings.respawn_delay,
+        };
+
+        let sqm = handlebars.render("mission.sqm", &template)?;
+
+        let config = Config::read(&mut sqm.as_bytes(), None, &Vec::new())?;
+
+        Ok(Mission {
+            map_name,
+            mission_name,
+            prefix,
+            sqm: config,
+        })
+    }
+
+    #[instrument(skip(self, composition))]
+    pub fn merge_composition(&mut self, composition: &Composition) -> Result<()> {
+        let center: (f64, f64, f64) = composition.get_center();
+
+        Ok(())
     }
 
     /// Convert this mission to SQM
-    pub fn to_sqm(&self) -> String {
-        String::new()
+    pub fn to_sqm(&self) -> Result<String> {
+        let mut buffer = Vec::new();
+        self.sqm.write(&mut buffer)?;
+
+        Ok(std::str::from_utf8(&buffer)?.to_string())
     }
 
     /// Return the class_name for this mission
-    pub fn class_name(&self) -> String {
-        format!("{}.{}", self.mission_name(), self.map_name)
+    pub fn mission_name(&self) -> String {
+        format!("{}.{}", self.class_name(), self.map_name)
     }
 
-    pub fn mission_name(&self) -> String {
+    pub fn class_name(&self) -> String {
         format!("{}_{}{}", self.prefix, self.map_name, self.mission_name,)
     }
 }
@@ -197,23 +279,24 @@ impl Addon {
     pub fn from_parts(
         prefix: String,
         addon_name: String,
-        missions: Vec<(PathBuf, String)>,
+        missions: Vec<(PathBuf, Mission)>,
     ) -> Self {
         let missions = missions
             .into_iter()
-            .map(|(directory, class_name)| {
+            .map(|(directory, mission)| {
                 let directory = format!(
-                    r"{}\{}\{}",
+                    r"{}\{}\missions\{}",
                     prefix,
                     addon_name,
                     directory
                         .parent()
-                        .map(|p| p.to_string_lossy().to_owned())
+                        .map(|p| p.file_name().map(|p| p.to_string_lossy().to_owned()))
+                        .flatten()
                         .unwrap()
                 );
                 MissionClass {
-                    briefing_name: format!("[{}] {}", prefix, class_name),
-                    class_name,
+                    briefing_name: format!("[{}] {}", prefix, mission.class_name()),
+                    class_name: mission.class_name(),
                     directory,
                 }
             })
