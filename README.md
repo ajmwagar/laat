@@ -65,15 +65,15 @@ jobs:
       - uses: actions/checkout@v2
 
       # Build, Pack, and Sign using LAAT
-      - uses: ajmwagar/laat@v1.1
+      - uses: ajmwagar/laat@v1.2.4
         with:
           command: ship
       
       # Release the mod to the Steam Workshop
-      - uses: ajmwagar/laat@v1.1
+      - uses: ajmwagar/laat@v1.2.4
         with:
           command: release
-          args: -u ${{ secrets.STEAM_USER }} -p ${{ secrets.STEAM_PASS }} --no-change-log
+          args: -u ${{ secrets.STEAM_USER }} -p ${{ secrets.STEAM_PASS }} ${{ github.event.head_commit.message }}
 ```
 
 ## Configuration
