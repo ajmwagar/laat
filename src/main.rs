@@ -31,7 +31,10 @@ enum Command {
     /// Clean the build folder
     Clean {},
     /// Generate addons
-    Build {},
+    Build { 
+        /// Plugin to filter too
+        plugin: Option<String>
+    },
     /// Convert addons to PBOs
     Pack {
         #[structopt(long)]
@@ -85,8 +88,8 @@ async fn run() -> laat::Result<()> {
 
     // Run Command
     match opts.command {
-        Command::Build {} => {
-            laat.build().await?;
+        Command::Build { plugin } => {
+            laat.build(plugin).await?;
         }
         Command::Clean {} => {
             laat.clean_build().await?;
@@ -104,7 +107,7 @@ async fn run() -> laat::Result<()> {
             laat.release(release).await?;
         }
         Command::Ship { windows } => {
-            laat.build().await?;
+            laat.build(None).await?;
             laat.pack(true, windows).await?;
         }
         _ => {}

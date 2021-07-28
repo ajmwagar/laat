@@ -154,19 +154,27 @@ impl Config {
     pub fn into_inner(self) -> ConfigClass {
         self.root_body
     }
+
+    pub fn inner(&self) -> &ConfigClass {
+        &self.root_body
+    }
+
+    pub fn inner_mut(&mut self) -> &mut ConfigClass {
+        &mut self.root_body
+    }
 }
 
 /// Config class
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConfigClass {
-    parent: String,
-    is_external: bool,
-    is_deletion: bool,
-    entries: Option<Vec<(String, ConfigEntry)>>,
+    pub parent: String,
+    pub is_external: bool,
+    pub is_deletion: bool,
+    pub entries: Option<Vec<(String, ConfigEntry)>>,
 }
 
 /// Config entry
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ConfigEntry {
     /// String entry
     StringEntry(String),
@@ -181,14 +189,14 @@ pub enum ConfigEntry {
 }
 
 /// Config array
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ConfigArray {
     is_expansion: bool,
-    elements: Vec<ConfigArrayElement>,
+    pub elements: Vec<ConfigArrayElement>,
 }
 
 /// Config array element
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ConfigArrayElement {
     /// String element
     StringElement(String),

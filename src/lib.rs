@@ -23,15 +23,15 @@ extern crate async_trait;
 #[macro_use]
 extern crate tracing;
 
-use std::path::Path;
-use futures_util::future::join_all;
 use crate::config::LaatConfig;
 use crate::context::BuildContext;
 use armake2::pbo::cmd_build;
+use futures_util::future::join_all;
 use handlebars::Handlebars;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use structopt::StructOpt;
 use tokio::io::AsyncReadExt;
@@ -42,8 +42,7 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 pub type Result<T> = std::result::Result<T, Error>;
 
 const PROJECT_FOLDERS: &[&str] = &["addons", "assets", "build", "release"];
-const GITIGNORE: &str = 
-r"
+const GITIGNORE: &str = r"
 build
 release
 ";
@@ -83,9 +82,11 @@ pub struct ReleaseSettings {
     #[structopt(short = "f", parse(from_os_str))]
     change_log_file: Option<PathBuf>,
 
-    #[structopt(required_if("change_log_file", "None"), required_if("no_change_log", "false"))]
+    #[structopt(
+        required_if("change_log_file", "None"),
+        required_if("no_change_log", "false")
+    )]
     change_notes: Vec<String>,
-
 }
 
 /// LAAT Compiler
@@ -97,13 +98,20 @@ pub struct LaatCompiler {
 
 impl LaatCompiler {
     #[instrument(skip(self))]
-    pub async fn build(&self) -> Result<()> {
+    pub async fn build(&self, plugin_filter: Option<String>) -> Result<()> {
         info!("Generating Arma 3 Addons...");
         self.clean_build().await?;
 
         for (name, plugin) in self.plugins.iter() {
-            debug!("Running {}.", name);
-            plugin.build(self.get_context()).await?;
+            if let Some(plugin_filter) = &plugin_filter {
+                if plugin_filter == name {
+                    debug!("Running {}.", name);
+                    plugin.build(self.get_context()).await?;
+                }
+            } else {
+                debug!("Running {}.", name);
+                plugin.build(self.get_context()).await?;
+            }
         }
 
         info!(
@@ -217,19 +225,9 @@ impl LaatCompiler {
     pub async fn sign_pbos(&self, release_path: &str, windows: bool) -> Result<()> {
         let (privkey_path, pubkey_path) = self.get_keys().await?;
 
-        let addon_path = if windows {
-            "Addons"
-        }
-        else {
-            "addons"
-        };
+        let addon_path = if windows { "Addons" } else { "addons" };
 
-        let key_path = if windows {
-            "Keys"
-        }
-        else {
-            "keys"
-        };
+        let key_path = if windows { "Keys" } else { "keys" };
 
         let walkdir = walkdir::WalkDir::new(format!("{}/{}", release_path, addon_path));
 
@@ -277,7 +275,11 @@ impl LaatCompiler {
 
         info!("Copying key file: {}", file_name);
 
-        tokio::fs::copy(pubkey_path, format!("{}/{}/{}", release_path, key_path, file_name)).await?;
+        tokio::fs::copy(
+            pubkey_path,
+            format!("{}/{}/{}", release_path, key_path, file_name),
+        )
+        .await?;
 
         join_all(sign_futs).await;
 
@@ -292,12 +294,7 @@ impl LaatCompiler {
 
         let mut pbo_futs = Vec::new();
 
-        let addon_path = if windows {
-            "Addons"
-        }
-        else {
-            "addons"
-        };
+        let addon_path = if windows { "Addons" } else { "addons" };
 
         for entry in walkdir {
             match entry {
@@ -367,8 +364,7 @@ impl LaatCompiler {
         if windows {
             tokio::fs::create_dir_all(format!("{}/Addons", release_path)).await?;
             tokio::fs::create_dir_all(format!("{}/Keys", release_path)).await?;
-        }
-        else {
+        } else {
             tokio::fs::create_dir_all(format!("{}/addons", release_path)).await?;
             tokio::fs::create_dir_all(format!("{}/keys", release_path)).await?;
         }
@@ -421,7 +417,6 @@ impl LaatCompiler {
 
         create_and_write_file(&gitignore, GITIGNORE).await?;
 
-
         // Init LAAT
         Self::from_path(init.path).await
     }
@@ -472,7 +467,6 @@ impl LaatCompiler {
 
         let mut content_folder: PathBuf = std::env::var("PWD")?.into();
         content_folder.push(context.released_addon_path());
-
 
         // 3. render workshop_upload.vdf
         let workshop_item = WorkshopItem {
@@ -537,8 +531,8 @@ pub fn create_handlebars<'a>() -> Result<Handlebars<'a>> {
 
     handlebars.register_template_string("laat.toml", include_str!("../templates/laat.toml.ht"))?;
 
-    handlebars.register_template_string("mission.sqm", include_str!("../templates/mission.sqm.ht"))?;
-
+    handlebars
+        .register_template_string("mission.sqm", include_str!("../templates/mission.sqm.ht"))?;
 
     handlebars.register_template_string(
         "workshop_upload.vdf",
@@ -550,7 +544,10 @@ pub fn create_handlebars<'a>() -> Result<Handlebars<'a>> {
     Ok(handlebars)
 }
 
-async fn create_and_write_file(file_path: impl AsRef<Path>, contents: impl Into<String>) -> Result<()> {
+async fn create_and_write_file(
+    file_path: impl AsRef<Path>,
+    contents: impl Into<String>,
+) -> Result<()> {
     let mut file = tokio::fs::File::create(file_path).await?;
     file.write_all(contents.into().as_bytes()).await?;
 
@@ -582,7 +579,7 @@ pub mod plugins {
             Box::new(AddonPlugin),
             Box::new(CustomsPlugin),
             Box::new(KitPlugin),
-            Box::new(MissionPlugin)
+            Box::new(MissionPlugin),
         ]
     }
 
