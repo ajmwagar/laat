@@ -11,6 +11,8 @@ WORKDIR /usr/src/laat
 COPY ./Cargo.toml ./Cargo.toml 
 COPY ./Cargo.lock ./Cargo.lock 
 
+COPY ./armake2 ./armake2
+
 # Build without binary's source code
 RUN cargo build --release 
 
