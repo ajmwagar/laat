@@ -25,6 +25,7 @@ impl Plugin for MissionPlugin {
         let composition = load_composition(
             &mission_settings.composition,
             mission_settings.composition_offset,
+            mission_settings.ignore_center
         )
         .await?;
 
@@ -105,6 +106,8 @@ struct MissionSettings {
     #[serde(default)]
     /// X, Y, Z offset for the composition.
     composition_offset: (f32, f32, f32),
+
+    ignore_center: bool
 }
 
 impl MissionSettings {
@@ -139,11 +142,12 @@ struct Composition {
     header: Config,
     composition: Config,
     offset: (f32, f32, f32),
+    ignore_center: bool
 }
 
 impl Composition {
     #[instrument(err)]
-    pub async fn from_path(path: &PathBuf, offset: (f32, f32, f32)) -> Result<Self> {
+    pub async fn from_path(path: &PathBuf, offset: (f32, f32, f32), ignore_center: bool) -> Result<Self> {
         let (header, composition) = tokio::join!(
             tokio::fs::File::open(format!("{}/header.sqe", path.display())),
             tokio::fs::File::open(format!("{}/composition.sqe", path.display()))
@@ -156,6 +160,7 @@ impl Composition {
             header,
             composition,
             offset,
+            ignore_center
         })
     }
 
@@ -171,7 +176,12 @@ impl Composition {
                 if let &[ConfigArrayElement::FloatElement(x), ConfigArrayElement::FloatElement(y), ConfigArrayElement::FloatElement(z)] =
                     &array.elements[..]
                 {
-                    return Ok((x, y, z));
+                    if !self.ignore_center {
+                        return Ok((x, y, z));
+                    }
+                    else {
+                        return Ok((0.,0.,0.));
+                    }
                 }
             };
         }
@@ -221,7 +231,6 @@ fn offset_classes(entries: EntryList, composition_offset: (f32, f32, f32)) -> En
         .into_iter()
         .map(|(name, entry)| {
             let entry = if let ConfigEntry::ClassEntry(mut class) = entry {
-                if name == POSITION_INFO {
                     // Offset
                     class.entries = class.entries.map(|mut entries| {
                         entries.iter_mut().find(|(name, _)| name == "position").map(
@@ -243,12 +252,11 @@ fn offset_classes(entries: EntryList, composition_offset: (f32, f32, f32)) -> En
 
                         entries
                     });
-                } else {
+
                     // Recurse
                     class.entries = class
                         .entries
                         .map(|entries| offset_classes(entries, composition_offset));
-                }
 
                 ConfigEntry::ClassEntry(class)
             } else {
@@ -266,7 +274,9 @@ fn add_to_element(element: ConfigArrayElement, increment: f32) -> ConfigArrayEle
         ConfigArrayElement::FloatElement(float) => {
             return ConfigArrayElement::FloatElement(float + increment);
         }
-        ConfigArrayElement::IntElement(_) => {}
+        ConfigArrayElement::IntElement(int) => {
+            return ConfigArrayElement::FloatElement(int as f32 + increment);
+        }
         ConfigArrayElement::ArrayElement(_) => {}
     }
 
@@ -277,9 +287,10 @@ fn add_to_element(element: ConfigArrayElement, increment: f32) -> ConfigArrayEle
 async fn load_composition(
     composition_path: &PathBuf,
     composition_offset: (f32, f32, f32),
+    ignore_center: bool
 ) -> Result<Composition> {
     info!("Loading composition at: {:?}", composition_path);
-    Ok(Composition::from_path(composition_path, composition_offset).await?)
+    Ok(Composition::from_path(composition_path, composition_offset, ignore_center).await?)
 }
 
 #[instrument(err)]
@@ -364,10 +375,13 @@ impl Mission {
             entries.into_iter().map(|(name, config)| {
                 if name == "Mission" {
                     if let ConfigEntry::ClassEntry(mut mission) = config {
+                        info!("Mission parent: {:?}", &mission.parent);
+                        let parent = mission.parent.clone();
+
                         mission.entries = mission.entries.map(|entries| {
                             let mut map: HashMap<String, ConfigEntry> = entries.into_iter().collect();
                             let entities = ConfigEntry::ClassEntry(ConfigClass {
-                                parent: "Mission".to_string(),
+                                parent,
                                 is_external: false,
                                 is_deletion: false,
                                 entries: Some(items.clone())
