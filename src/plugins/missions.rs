@@ -83,6 +83,16 @@ impl Plugin for MissionPlugin {
     }
 }
 
+type MapEntry = String;
+type MapOffsetEntry = (String, (f32, f32, f32));
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+enum MapConfig {
+    Map(MapEntry),
+    MapOffset(MapOffsetEntry)
+}
+
 #[derive(Debug, Deserialize)]
 struct MissionSettings {
     #[serde(default = "default_addon_name")]
@@ -90,7 +100,7 @@ struct MissionSettings {
     addon_name: String,
 
     /// List of maps to create missions for
-    maps: Vec<String>,
+    maps: Vec<MapConfig>,
 
     /// Mission name
     #[serde(default = "default_mission_name")]
@@ -164,6 +174,10 @@ impl Composition {
         })
     }
 
+    pub fn set_offset(&mut self, offset: (f32, f32, f32)) {
+        self.offset = offset;
+    }
+
     /// Get "center[]" from SQE, cast it into a tuple
     pub fn get_center(&self) -> Result<(f32, f32, f32)> {
         let config = self.composition.inner();
@@ -196,7 +210,15 @@ impl Composition {
     }
 
     /// Get and offset items from the SQE
-    pub fn get_offseted_items(&self) -> Result<EntryList> {
+    pub fn get_offseted_items(&self, offset_override: Option<(f32, f32, f32)>) -> Result<EntryList> {
+        let offset = if let Some(offset_override) = offset_override {
+            info!("Overriding offset...");
+            offset_override
+        }
+        else {
+            self.get_offset()?
+        };
+
         let config = self.composition.inner();
 
         if let Some(entries) = config.entries.clone() {
@@ -205,7 +227,7 @@ impl Composition {
             if let Some(ConfigEntry::ClassEntry(items)) = map.get("items") {
                 if let Some(entries) = items.entries.clone() {
                     debug!("Item Classes: {}", entries.len());
-                    return Ok(offset_classes(entries, self.get_offset()?));
+                    return Ok(offset_classes(entries, offset));
                 }
             };
         }
@@ -215,8 +237,6 @@ impl Composition {
 }
 
 type EntryList = Vec<(String, ConfigEntry)>;
-
-const POSITION_INFO: &str = "PositionInfo";
 
 /// Offset classes recursively
 #[instrument(skip(entries, composition_offset))]
@@ -319,6 +339,7 @@ struct Mission {
     map_name: String,
     mission_name: String,
     prefix: String,
+    offset_override: Option<(f32, f32, f32)>,
 
     sqm: Config,
 }
@@ -328,11 +349,16 @@ impl Mission {
     pub fn new(
         prefix: String,
         mission_name: String,
-        map_name: String,
+        map: MapConfig,
         mission_settings: &MissionSettings,
         build_config: &BuildContext,
     ) -> Result<Self> {
         let handlebars = create_handlebars()?;
+
+        let (map_name, offset_override) = match map {
+            MapConfig::Map(map_name) => (map_name, None),
+            MapConfig::MapOffset((map_name, offset)) => (map_name, Some(offset)),
+        };
 
         #[derive(Serialize)]
         struct MissionTemplate {
@@ -357,6 +383,7 @@ impl Mission {
 
         Ok(Mission {
             map_name,
+            offset_override,
             mission_name,
             prefix,
             sqm: config,
@@ -365,7 +392,7 @@ impl Mission {
 
     #[instrument(skip(self, composition))]
     pub fn merge_composition(&mut self, composition: &Composition) -> Result<()> {
-        let items = composition.get_offseted_items()?;
+        let items = composition.get_offseted_items(self.offset_override)?;
 
         let mut class = self.sqm.inner_mut();
 
@@ -375,7 +402,6 @@ impl Mission {
             entries.into_iter().map(|(name, config)| {
                 if name == "Mission" {
                     if let ConfigEntry::ClassEntry(mut mission) = config {
-                        info!("Mission parent: {:?}", &mission.parent);
                         let parent = mission.parent.clone();
 
                         mission.entries = mission.entries.map(|entries| {
