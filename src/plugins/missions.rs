@@ -1,3 +1,4 @@
+use armake2::config::ConfigArray;
 use crate::context::AddonManager;
 use crate::create_handlebars;
 use crate::BuildContext;
@@ -83,6 +84,11 @@ impl Plugin for MissionPlugin {
     }
 }
 
+async fn add_mission_files(addon_manager: &mut AddonManager, mission_files_path: &PathBuf) -> Result<()> {
+
+    Ok(())
+}
+
 type MapEntry = String;
 type MapOffsetEntry = (String, (f32, f32, f32));
 
@@ -117,7 +123,9 @@ struct MissionSettings {
     /// X, Y, Z offset for the composition.
     composition_offset: (f32, f32, f32),
 
-    ignore_center: bool
+    ignore_center: bool,
+
+    missions_folder: PathBuf
 }
 
 impl MissionSettings {
@@ -187,21 +195,21 @@ impl Composition {
 
             if let Some(ConfigEntry::ArrayEntry(array)) = map.get("center") {
                 debug!("Center Array: {:?}", array);
-                if let &[ConfigArrayElement::FloatElement(x), ConfigArrayElement::FloatElement(y), ConfigArrayElement::FloatElement(z)] =
-                    &array.elements[..]
-                {
-                    if !self.ignore_center {
-                        return Ok((x, y, z));
-                    }
-                    else {
-                        return Ok((0.,0.,0.));
-                    }
+
+                let center = get_center_from_field(&array);
+
+                if !self.ignore_center {
+                    return Ok(center);
+                }
+                else {
+                    return Ok((0., 0., 0.));
                 }
             };
         }
 
         Err("Failed to get center[]".into())
     }
+
     pub fn get_offset(&self) -> Result<(f32, f32, f32)> {
         let (x1, y1, z1) = self.get_center()?;
         let (x2, y2, z2) = self.offset;
@@ -234,6 +242,22 @@ impl Composition {
 
         Err("Failed to get offseted items".into())
     }
+}
+
+fn get_center_from_field(array: &ConfigArray) -> (f32, f32, f32) {
+    let map_elem = |x: &ConfigArrayElement| {
+        match x {
+            ConfigArrayElement::FloatElement(x) => *x,
+            ConfigArrayElement::IntElement(x) => *x as f32,
+            _ => 0.
+        }
+    };
+
+    let x = array.elements.get(0).map(map_elem).unwrap_or_default();
+    let y = array.elements.get(1).map(map_elem).unwrap_or_default();
+    let z = array.elements.get(2).map(map_elem).unwrap_or_default();
+
+    (x, y ,z)
 }
 
 type EntryList = Vec<(String, ConfigEntry)>;
