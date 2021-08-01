@@ -159,7 +159,7 @@ Currently there are only a few plugins, but many more are planned. If you'd like
 
 ### `addons`
 
-The `addons` plugin is the simplist. It takes all of the existing Arma 3 Addons in your `addons` folder and copies them into the `build` folder.
+The `addons` plugin is the most trivial. It takes all of the existing Arma 3 Addons in your `addons` folder and copies them into the `build` folder.
 
 This enables you to use LAAT as much or as little as you'd like, by mantaining support for the existing Arma 3 Mod format and tooling.
 
