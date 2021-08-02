@@ -53,22 +53,8 @@ class CustomAttributes
 					};
 					class value
 					{
-						items=3;
+						items=2;
 						class Item0
-						{
-							class data
-							{
-								class type
-								{
-									type[]=
-									{
-										"STRING"
-									};
-								};
-								value="MenuInventory";
-							};
-						};
-						class Item1
 						{
 							class data
 							{
@@ -82,7 +68,7 @@ class CustomAttributes
 								value="MenuPosition";
 							};
 						};
-						class Item2
+						class Item1
 						{
 							class data
 							{
