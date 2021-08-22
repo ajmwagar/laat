@@ -30,6 +30,7 @@ use futures_util::future::join_all;
 use handlebars::Handlebars;
 use serde::Serialize;
 use std::collections::HashMap;
+use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
@@ -41,6 +42,7 @@ pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+const PBOPREFIX: &str = "$PBOPREFIX$";
 const PROJECT_FOLDERS: &[&str] = &["addons", "assets", "build", "release"];
 const GITIGNORE: &str = r"
 build
@@ -314,8 +316,24 @@ impl LaatCompiler {
                                 let file_name = entry.file_name().to_string_lossy();
                                 let pbo_name = format!("{}.pbo", file_name);
 
-                                pack.header_extensions
-                                    .push(format!("prefix={}\\{}", prefix, file_name));
+                                // Check for $PBOPREFIX$ file.
+                                let mut pbo_prefix_path = entry.path().to_owned();
+                                pbo_prefix_path.push(PBOPREFIX);
+
+                                match std::fs::File::open(pbo_prefix_path) {
+                                    Ok(mut file) => {
+                                        let mut pbo_prefix = String::new();
+                                        file.read_to_string(&mut pbo_prefix)?;
+
+                                        pack.header_extensions.clear();
+                                        pack.header_extensions.push(pbo_prefix);
+                                    }
+
+                                    Err(_why) => {
+                                        pack.header_extensions
+                                            .push(format!("prefix={}\\{}", prefix, file_name));
+                                    }
+                                }
 
                                 let mut output = std::fs::File::create(format!(
                                     "{}/{}/{}",
