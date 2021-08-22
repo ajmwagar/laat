@@ -1,3 +1,4 @@
+use tokio::io::AsyncReadExt;
 use armake2::config::ConfigArray;
 use crate::context::AddonManager;
 use crate::create_handlebars;
@@ -11,6 +12,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 const MISSION_SETTINGS_KEY: &str = "missions";
+const CBA_SETTINGS: &str = "cba_settings_hasSettingsFile = 1;";
 
 #[derive(Debug)]
 pub struct MissionPlugin;
@@ -73,6 +75,18 @@ impl Plugin for MissionPlugin {
 
         addon_manager.add_file(config_cpp, "config.cpp".into());
 
+        // CBA settings
+        if let Some(cba_settings_path) = mission_settings.cba_settings_file {
+            addon_manager.add_file(CBA_SETTINGS.to_string(), "description.ext".into());
+
+            let mut cba_settings_string = String::new();
+            let mut settings_file = tokio::fs::File::open(cba_settings_path).await?;
+            settings_file.read_to_string(&mut cba_settings_string).await?;
+
+            addon_manager.add_file(CBA_SETTINGS.to_string(), "description.ext".into());
+            addon_manager.add_file(cba_settings_string, "cba_settings.sqf".into());
+        }
+
         info!("Building Addon...");
         addon_manager.build_addon().await?;
 
@@ -125,7 +139,8 @@ struct MissionSettings {
 
     ignore_center: bool,
 
-    missions_folder: PathBuf
+    missions_folder: PathBuf,
+    cba_settings_file: Option<PathBuf>
 }
 
 impl MissionSettings {
