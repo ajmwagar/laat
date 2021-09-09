@@ -1,4 +1,5 @@
-use tokio::io::AsyncReadExt;
+use std::path::Path;
+use std::io::Read;
 use armake2::config::ConfigArray;
 use crate::context::AddonManager;
 use crate::create_handlebars;
@@ -62,6 +63,11 @@ impl Plugin for MissionPlugin {
 
                 addon_manager.add_file(sqm, path.clone());
 
+                // CBA settings
+                if let Some(cba_settings_path) = &mission_settings.cba_settings_file  {
+                    let _ = add_cba_settings(&cba_settings_path, &mut addon_manager, &mission);
+                }
+
                 Some((path, mission))
             })
             .collect::<Vec<_>>();
@@ -75,17 +81,6 @@ impl Plugin for MissionPlugin {
 
         addon_manager.add_file(config_cpp, "config.cpp".into());
 
-        // CBA settings
-        if let Some(cba_settings_path) = mission_settings.cba_settings_file {
-            addon_manager.add_file(CBA_SETTINGS.to_string(), "description.ext".into());
-
-            let mut cba_settings_string = String::new();
-            let mut settings_file = tokio::fs::File::open(cba_settings_path).await?;
-            settings_file.read_to_string(&mut cba_settings_string).await?;
-
-            addon_manager.add_file(CBA_SETTINGS.to_string(), "description.ext".into());
-            addon_manager.add_file(cba_settings_string, "cba_settings.sqf".into());
-        }
 
         info!("Building Addon...");
         addon_manager.build_addon().await?;
@@ -96,6 +91,20 @@ impl Plugin for MissionPlugin {
     fn name(&self) -> String {
         "missions".to_string()
     }
+}
+
+#[instrument(err, skip(addon_manager, mission))]
+fn add_cba_settings(cba_settings_path: &Path, addon_manager: &mut AddonManager, mission: &Mission) -> Result<()> {
+    addon_manager.add_file(CBA_SETTINGS.to_string(), "description.ext".into());
+
+    let mut cba_settings_string = String::new();
+    let mut settings_file = std::fs::File::open(cba_settings_path)?;
+    settings_file.read_to_string(&mut cba_settings_string)?;
+
+    addon_manager.add_file(CBA_SETTINGS.to_string(), format!("missions/{}/description.ext", mission.mission_name()).into());
+    addon_manager.add_file(cba_settings_string, format!("missions/{}/cba_settings.sqf", mission.mission_name()).into());
+
+    Ok(())
 }
 
 async fn add_mission_files(addon_manager: &mut AddonManager, mission_files_path: &PathBuf) -> Result<()> {
