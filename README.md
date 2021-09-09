@@ -165,7 +165,9 @@ This enables you to use LAAT as much or as little as you'd like, by mantaining s
 
 ### `missions`
 
-The `missions` plugin aims to fix the pain-points associated with mantaining server mission files, and any compositions that are needed across all files.
+The `missions` plugin aims to fix the pain-points associated with mantaining server mission files, and any compositions that are needed across all files.4
+
+You can customize the global offset using `composition_offset` or specify a per-map offset for your composition.
 
 To get started, add the following to your `LAAT.toml`
 
@@ -187,9 +189,11 @@ maps = [
 "Altis",
 "Stratis",
 "Tanoa",
-"Malden"
+["Malden", [200, 500, 200]]
 ]
 ```
+
+
 
 and make sure you add the missions plugin to your plugins section:
 
