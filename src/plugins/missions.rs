@@ -65,7 +65,10 @@ impl Plugin for MissionPlugin {
 
                 // CBA settings
                 if let Some(cba_settings_path) = &mission_settings.cba_settings_file  {
-                    let _ = add_cba_settings(&cba_settings_path, &mut addon_manager, &mission);
+                    if let Err(why) = add_cba_settings(&cba_settings_path, &mut addon_manager, &mission) {
+                        error!("Failed to add CBA Settings ({:?}) to addon: {}", &cba_settings_path, why);
+                        return None;
+                    }
                 }
 
                 Some((path, mission))
@@ -101,8 +104,8 @@ fn add_cba_settings(cba_settings_path: &Path, addon_manager: &mut AddonManager, 
     let mut settings_file = std::fs::File::open(cba_settings_path)?;
     settings_file.read_to_string(&mut cba_settings_string)?;
 
-    addon_manager.add_file(CBA_SETTINGS.to_string(), format!("missions/{}/description.ext", mission.mission_name()).into());
     addon_manager.add_file(cba_settings_string, format!("missions/{}/cba_settings.sqf", mission.mission_name()).into());
+    addon_manager.add_file(CBA_SETTINGS.to_string(), format!("missions/{}/description.ext", mission.mission_name()).into());
 
     Ok(())
 }
