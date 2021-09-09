@@ -58,10 +58,21 @@ enum Command {
 
 #[tokio::main]
 async fn main() {
+    setup_panic_hook();
     if let Err(why) = run().await {
         error!("{}", why);
         std::process::exit(1);
     }
+}
+
+fn setup_panic_hook() {
+    let default_panic = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        error!("PANIC: {}", info);
+        default_panic(info);
+        error!("FATAL! Exiting.");
+        std::process::exit(1);
+    }));
 }
 
 async fn run() -> laat::Result<()> {
