@@ -15,6 +15,9 @@ use serde::{Deserialize, Serialize};
 const MISSION_SETTINGS_KEY: &str = "missions";
 const CBA_SETTINGS: &str = "cba_settings_hasSettingsFile = 1;";
 
+const ON_PLAYER_DEATH: &str = r#"[player, [missionNamespace, "inventory_var"]] call BIS_fnc_saveInventory;"#;
+const ON_PLAYER_RESPAWN: &str = r#"[player, [missionNamespace, "inventory_var"]] call BIS_fnc_loadInventory;"#;
+
 #[derive(Debug)]
 pub struct MissionPlugin;
 
@@ -63,12 +66,18 @@ impl Plugin for MissionPlugin {
 
                 addon_manager.add_file(sqm, path.clone());
 
+
                 // CBA settings
                 if let Some(cba_settings_path) = &mission_settings.cba_settings_file  {
                     if let Err(why) = add_cba_settings(&cba_settings_path, &mut addon_manager, &mission) {
                         error!("Failed to add CBA Settings ({:?}) to addon: {}", &cba_settings_path, why);
                         return None;
                     }
+                }
+
+                // Keep inventory on spawn
+                if mission_settings.respawn_keep_inventory {
+                    keep_inventory_on_respawn(&mut addon_manager, &mission);
                 }
 
                 Some((path, mission))
@@ -110,6 +119,11 @@ fn add_cba_settings(cba_settings_path: &Path, addon_manager: &mut AddonManager, 
     Ok(())
 }
 
+fn keep_inventory_on_respawn(addon_manager: &mut AddonManager, mission: &Mission) {
+    addon_manager.add_file(ON_PLAYER_RESPAWN.to_string(), format!("missions/{}/onPlayerRespawn.sqf", mission.mission_name()).into());
+    addon_manager.add_file(ON_PLAYER_DEATH.to_string(), format!("missions/{}/onPlayerKilled.sqf", mission.mission_name()).into());
+}
+
 async fn add_mission_files(addon_manager: &mut AddonManager, mission_files_path: &PathBuf) -> Result<()> {
 
     Ok(())
@@ -141,6 +155,10 @@ struct MissionSettings {
     /// Delay, in seconds between death and when allowed to respawn.
     #[serde(default = "default_respawn_delay")]
     respawn_delay: usize,
+
+    #[serde(default)]
+    /// Keep inventory on respawn or not.
+    respawn_keep_inventory: bool, 
 
     /// Composition to add to missions
     composition: PathBuf,
