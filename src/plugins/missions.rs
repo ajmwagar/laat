@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 const MISSION_SETTINGS_KEY: &str = "missions";
 const CBA_SETTINGS: &str = "cba_settings_hasSettingsFile = 1;";
 
-const ON_PLAYER_DEATH: &str = r#"player setVariable ["Saved_Loadout",getUnitLoadout player];"#;
-const ON_PLAYER_RESPAWN: &str = r#"player setUnitLoadout (player getVariable ["Saved_Loadout",[]]);"#;
+const ON_PLAYER_DEATH: &str = "player setVariable [\"Saved_Loadout\",getUnitLoadout player];";
+const ON_PLAYER_RESPAWN: &str = "player setUnitLoadout (player getVariable [\"Saved_Loadout\",[]]);";
 
 #[derive(Debug)]
 pub struct MissionPlugin;
