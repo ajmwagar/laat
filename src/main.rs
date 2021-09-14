@@ -1,6 +1,6 @@
-use laat::ReleaseSettings;
 use laat::InitSettings;
 use laat::LaatCompiler;
+use laat::ReleaseSettings;
 use std::path::PathBuf;
 use structopt::StructOpt;
 use tracing::error;
@@ -31,9 +31,9 @@ enum Command {
     /// Clean the build folder
     Clean {},
     /// Generate addons
-    Build { 
+    Build {
         /// Plugin to filter too
-        plugin: Option<String>
+        plugin: Option<String>,
     },
     /// Convert addons to PBOs
     Pack {
@@ -42,7 +42,7 @@ enum Command {
         sign: bool,
         #[structopt(long)]
         /// Build with windows filenames
-        windows: bool
+        windows: bool,
     },
     /// Sign your PBOs
     Sign {},
@@ -52,13 +52,12 @@ enum Command {
     Ship {
         #[structopt(long)]
         /// Build with windows filenames
-        windows: bool
-    }
+        windows: bool,
+    },
 }
 
 #[tokio::main]
 async fn main() {
-    setup_panic_hook();
     if let Err(why) = run().await {
         error!("{}", why);
         std::process::exit(1);
@@ -76,9 +75,15 @@ fn setup_panic_hook() {
 }
 
 async fn run() -> laat::Result<()> {
-    // Parse CLI Args
     let opts = Opts::from_args();
 
+    setup_panic_hook();
+    init_logging(&opts)?;
+
+    run_command(opts).await
+}
+
+fn init_logging(opts: &Opts) -> laat::Result<()> {
     // Set up logging
     let filter = if opts.debug {
         EnvFilter::new("laat=debug")
@@ -90,14 +95,16 @@ async fn run() -> laat::Result<()> {
         return Err(format!("Failed to set up logger: {}", why).into());
     }
 
-    // Create LAAT Context
+    Ok(())
+}
+
+async fn run_command(opts: Opts) -> laat::Result<()> {
     let laat = if let Command::Init(init) = &opts.command {
         LaatCompiler::init(init.clone()).await
     } else {
         LaatCompiler::from_path(opts.config_file).await
     }?;
 
-    // Run Command
     match opts.command {
         Command::Build { plugin } => {
             laat.build(plugin).await?;
@@ -123,6 +130,6 @@ async fn run() -> laat::Result<()> {
         }
         _ => {}
     }
-
+    
     Ok(())
 }
